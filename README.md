@@ -40,13 +40,13 @@ python tools/bench_native.py --skip-bench  # sadece son sonuçlardan tabloyu yen
 <!-- BENCH-NATIVE:START -->
 | İşlem | 10.000 satır | 100.000 satır | 500.000 satır |
 |---|---:|---:|---:|
-| Ayrıştırma (parse_all) | 5.41 ms | 59.84 ms | 285.39 ms |
-| Filtreleme (5xx + checkout) | 8.4 µs | 358.6 µs | 3.01 ms |
-| Path araması (checkout) | 15.0 µs | 436.7 µs | 3.65 ms |
-| Özet istatistik (summarize) | 161.0 µs | 2.59 ms | 14.54 ms |
-| Saatlik dağılım (hourly) | 17.5 µs | 481.6 µs | 3.22 ms |
-| Top endpoint'ler (top_endpoints) | 24.6 µs | 505.8 µs | 3.96 ms |
-| Ayrıştırma hızı | 1.8 M satır/sn | 1.7 M satır/sn | 1.8 M satır/sn |
+| Ayrıştırma (parse_all) | 4.14 ms | 50.73 ms | 243.59 ms |
+| Filtreleme (5xx + checkout) | 8.6 µs | 180.8 µs | 1.83 ms |
+| Path araması (checkout) | 11.0 µs | 260.5 µs | 2.25 ms |
+| Özet istatistik (summarize) | 74.1 µs | 1.10 ms | 6.53 ms |
+| Saatlik dağılım (hourly) | 19.9 µs | 219.5 µs | 1.90 ms |
+| Top endpoint'ler (top_endpoints) | 22.2 µs | 249.0 µs | 2.86 ms |
+| Ayrıştırma hızı | 2.4 M satır/sn | 2.0 M satır/sn | 2.1 M satır/sn |
 
 - **Tarih:** 2026-10-28
 - **CPU:** 12th Gen Intel(R) Core(TM) i7-1255U
@@ -83,21 +83,21 @@ npm run bench -- --browser chromium   # başka motorla karşılaştırma (README
 <!-- BENCH-BROWSER:START -->
 | Ölçüm | 10.000 satır | 100.000 satır | 500.000 satır |
 |---|---:|---:|---:|
-| Dosya okuma (`File.arrayBuffer()`) | 5.14 ms | 33.8 ms | 177 ms |
-| JS → WASM kopyası (byte kopyası + UTF-8 doğrulama) | 0.88 ms | 6.00 ms | 29.1 ms |
-| Ayrıştırma (WASM, parçalı) | 8.54 ms | 75.4 ms | 323 ms |
-| İlk çizim (Memo'lar + DOM + boyama) | 20.1 ms | 28.7 ms | 56.3 ms |
-| Dosya seçimi → panel ekranda | 34.5 ms | 145 ms | 573 ms |
-| Status filtresi (5xx) → ekranda | 14.8 ms | 26.1 ms | 26.7 ms |
-| Path araması (checkout) → ekranda | 36.5 ms | 37.5 ms | 37.7 ms |
-| Native ayrıştırma (criterion) | 5.41 ms | 59.8 ms | 285 ms |
-| WASM / native ayrıştırma oranı | 1.58× | 1.26× | 1.13× |
+| Dosya okuma (`File.arrayBuffer()`) | 4.74 ms | 37.7 ms | 191 ms |
+| JS → WASM kopyası (byte kopyası + UTF-8 doğrulama) | 0.86 ms | 6.68 ms | 34.6 ms |
+| Ayrıştırma (WASM, parçalı) | 11.7 ms | 92.7 ms | 383 ms |
+| İlk çizim (Memo'lar + DOM + boyama) | 24.9 ms | 33.7 ms | 38.1 ms |
+| Dosya seçimi → panel ekranda | 42.9 ms | 169 ms | 660 ms |
+| Status filtresi (5xx) → ekranda | 20.0 ms | 24.9 ms | 23.5 ms |
+| Path araması (checkout) → ekranda | 36.9 ms | 37.1 ms | 37.3 ms |
+| Native ayrıştırma (criterion) | 4.14 ms | 50.7 ms | 244 ms |
+| WASM / native ayrıştırma oranı | 2.82× | 1.83× | 1.57× |
 
 - **Tarih:** 2026-10-28
 - **Tarayıcı:** Firefox 157.0 (Playwright 1.64.1, headless: true)
 - **CPU:** 12th Gen Intel(R) Core(TM) i7-1255U
 - **İşletim sistemi:** Windows 11 (build 26300, x64)
-- **.wasm boyutu:** 530 KB (gzip: 177 KB)
+- **.wasm boyutu:** 530 KB (gzip: 178 KB)
 - **Yöntem:** 5 ölçüm + 1 ısınma turu, her tur yeni sekme; değerler medyandır. Ayrıştırma, UI'ı dondurmamak için parçalar arasında tarayıcıya kontrol verdiğinden native süreyle birebir aynı iş değildir.
 <!-- BENCH-BROWSER:END -->
 
@@ -135,12 +135,14 @@ Her adım ayrı bir commit; değerler 500.000 satırlık sütundan (medyan). Nat
 | | | İlk çizim (Memo'lar + DOM + boyama) | 74.9 ms | 53.2 ms (−%29) |
 | | | Ayrıştırma (native) | 282.08 ms | 285.39 ms (≈ aynı) |
 | | | Dosya seçimi → panel ekranda | 544 ms | 573 ms (+%5)¹ |
-| 4 | Tüm metin alanlarını numaralandırma: IP, method, user agent, tarih ve saat dilimi de `Tables` içinde bir kez saklanır, kayıt tamamen sayılardan oluşur (heap ayırması yok, ~56 byte) | Ayrıştırma (native) | 285.39 ms | _ölçülecek_ |
-| | | `summarize` (native) | 14.54 ms | _ölçülecek_ |
-| | | Ayrıştırma (Firefox) | 323 ms | _ölçülecek_ |
-| | | Dosya seçimi → panel ekranda | 573 ms | _ölçülecek_ |
+| 4 | Tüm metin alanlarını numaralandırma: IP, method, user agent, tarih ve saat dilimi de `Tables` içinde bir kez saklanır, kayıt tamamen sayılardan oluşur (heap ayırması yok, ~56 byte) | Ayrıştırma (native) | 285.39 ms | 243.59 ms (−%15) |
+| | | `summarize` (native) | 14.54 ms | 6.53 ms (−%55) |
+| | | Ayrıştırma (Firefox) | 323 ms | 383 ms (+%19)² |
+| | | Dosya seçimi → panel ekranda | 573 ms | 660 ms (+%15)² |
 
 ¹ İlk ölçümde 612 ms çıkmıştı; kodu değişmeyen adımlar da yavaşladığı için ölçüm tekrarlandı (tablodaki değerler tekrardan). Kalan farkın çoğu kodu değişmeyen dosya okumasından geliyor (149 → 177 ms); bu adım tur tura ±%15 oynuyor.
+
+² A/B ölçümüyle doğrulandı (`npm run bench:ab -- 34e3d75 421b7e4`, 10 tur): Firefox'ta ayrıştırma +%16 yavaş (B yalnızca 1/10 turda hızlı), ilk çizim −%17 hızlı (10/10 tur). Kayıt başına 6 hash araması, Firefox'un WASM motorunda 4 `String` ayırmaktan pahalıya geldi; native ve V8'de ise kazançlıydı.
 
 ## Örnek Çalışma Zamanı Görüntüleri
 
