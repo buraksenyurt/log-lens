@@ -16,12 +16,12 @@
 //      with `trunk build --release`. "." builds the current working tree.
 //   2. Both dist/ folders are served; the same samples/bench_<size>.log is loaded
 //      alternately in both versions (1 warm-up round + N measured rounds).
-//   3. Prints medians, the difference and in how many rounds B was faster.
-//      Nothing is written to README.md.
+//   3. Prints medians, the difference and in how many rounds B was faster, and saves
+//      the report to .bench-ab/results/. Nothing is written to README.md.
 
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-import { readFileSync, existsSync, mkdirSync, openSync, closeSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, openSync, closeSync, statSync } from "node:fs";
 import { join, extname, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -237,8 +237,10 @@ try {
   process.exit(1);
 }
 
-console.log(`\n${BROWSER} ${browser.version()} · ${SIZE.toLocaleString("tr-TR")} satır · 1 ısınma + ${RUNS} tur, dönüşümlü\n`);
+const header = `${BROWSER} ${browser.version()} · ${SIZE.toLocaleString("tr-TR")} satır · 1 ısınma + ${RUNS} tur, dönüşümlü`;
+console.log(`\n${header}\n`);
 const results = { A: [], B: [] };
+const log = [];
 try {
   for (let round = 0; round <= RUNS; round++) {
     // Alternate the order every round (A B, B A, ...) so drift does not favour one side.
@@ -249,7 +251,9 @@ try {
       if (round > 0) results[side].push(r);
       line.push(`${side}: parse ${fmtMs(r.parse)}, toplam ${fmtMs(r.total)}`);
     }
-    console.log(`  ${round === 0 ? "ısınma " : `tur ${String(round).padStart(2)}`}  ${line.join("  |  ")}`);
+    const text = `  ${round === 0 ? "ısınma " : `tur ${String(round).padStart(2)}`}  ${line.join("  |  ")}`;
+    console.log(text);
+    log.push(text);
   }
 } finally {
   await browser.close();
@@ -285,6 +289,17 @@ for (const [key, label] of rows) {
   );
 }
 console.log(`\n${table.join("\n")}\n`);
+
+// Keep a copy of the report so it can be shared or compared later.
+const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
+const reportDir = join(ROOT, ".bench-ab", "results");
+mkdirSync(reportDir, { recursive: true });
+const reportPath = join(reportDir, `${stamp}_${A.label.split(" ")[0]}_vs_${B.label.split(" ")[0]}.md`.replace(/[^\w.\-]/g, "_"));
+writeFileSync(
+  reportPath,
+  `# A/B: ${A.label} vs ${B.label}\n\n${header}\n\n${table.join("\n")}\n\n\`\`\`\n${log.join("\n")}\n\`\`\`\n`,
+);
+console.log(`Rapor kaydedildi: ${reportPath}`);
 console.log(
   `Okuma: "B daha hızlı" sütunu ${RUNS} turun büyük çoğunluğunda (ör. 10 turda 8+) ya da azınlığında (2-) ise fark büyük olasılıkla gerçektir; yarı yarıya ise gürültü düzeyindedir.`,
 );
