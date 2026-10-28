@@ -168,70 +168,62 @@ pub fn raw_entry<'a>(text: &'a str, entry: &LogEntry) -> RawEntry<'a> {
     parse_line(line).expect("entry offsets always point at a line that parsed before")
 }
 
-/// Splits `25/Oct/2026:13:55:36 +0300` into (`25/Oct/2026`, seconds of day, `+0300`).
-fn split_timestamp(ts: &str) -> Option<(&str, u32, &str)> {
-    let (date, rest) = ts.split_once(':')?;
-    let (time, zone) = rest.split_once(' ').unwrap_or((rest, ""));
-    let mut parts = time.split(':').map(|p| p.parse::<u32>().ok());
-    let (h, m, s) = (parts.next()??, parts.next()??, parts.next()??);
-    if h > 23 || m > 59 || s > 60 {
-        return None;
-    }
-    Some((date, h * 3600 + m * 60 + s, zone))
-}
-
 #[derive(Debug, PartialEq)]
 pub enum ParseError {
     MissingField(&'static str),
     InvalidNumber(&'static str),
 }
 
-/// Parse a single log line
+/// Parse a single log line.
+///
+/// Single pass over the bytes: every delimiter of the format (space, `[`, `]`,
+/// `"`) is ASCII, so byte positions are always valid `&str` boundaries and no
+/// UTF-8 decoding, splitting iterator or standard number parser is needed on
+/// the hot path.
 pub fn parse_line(line: &str) -> Result<RawEntry<'_>, ParseError> {
-    let line = line.trim();
-    let (ip, rest) = line.split_once(' ').ok_or(ParseError::MissingField("ip"))?;
-    let rest = rest
-        .split_once('[')
-        .ok_or(ParseError::MissingField("timestamp"))?
-        .1;
+    use ParseError::{InvalidNumber, MissingField};
 
-    let (timestamp, rest) = rest
-        .split_once(']')
-        .ok_or(ParseError::MissingField("timestamp"))?;
+    let line = line.trim_ascii();
+    let b = line.as_bytes();
 
-    let (date, seconds, zone) =
-        split_timestamp(timestamp).ok_or(ParseError::InvalidNumber("time"))?;
-    let hour = (seconds / 3600) as u8;
+    let ip_end = find(b, 0, b' ').ok_or(MissingField("ip"))?;
+    let ts_start = find(b, ip_end, b'[').ok_or(MissingField("timestamp"))? + 1;
+    let ts_end = find(b, ts_start, b']').ok_or(MissingField("timestamp"))?;
+    let timestamp = &line[ts_start..ts_end];
+    let (date, seconds, zone) = split_timestamp(timestamp).ok_or(InvalidNumber("time"))?;
 
-    let (request, rest) = take_quoted(rest).ok_or(ParseError::MissingField("request"))?;
-    let mut parts = request.split_whitespace();
-    let method = parts.next().ok_or(ParseError::MissingField("method"))?;
-    let path = parts.next().ok_or(ParseError::MissingField("path"))?;
-    let mut nums = rest.split_whitespace();
-    let status = nums
-        .next()
-        .ok_or(ParseError::MissingField("status"))?
-        .parse::<u16>()
-        .map_err(|_| ParseError::InvalidNumber("status"))?;
+    // "GET /path HTTP/1.1"
+    let req_start = find(b, ts_end, b'"').ok_or(MissingField("request"))? + 1;
+    let req_end = find(b, req_start, b'"').ok_or(MissingField("request"))?;
+    let mut parts = line[req_start..req_end].split_ascii_whitespace();
+    let method = parts.next().ok_or(MissingField("method"))?;
+    let path = parts.next().ok_or(MissingField("path"))?;
 
-    let bytes = match nums.next().ok_or(ParseError::MissingField("bytes"))? {
-        "-" => 0,
-        b => b
-            .parse::<u64>()
-            .map_err(|_| ParseError::InvalidNumber("bytes"))?,
+    // 200 1534
+    let (status, pos) = token(b, req_end + 1).ok_or(MissingField("status"))?;
+    let status = u16::try_from(parse_u64(status).ok_or(InvalidNumber("status"))?)
+        .map_err(|_| InvalidNumber("status"))?;
+    let (bytes, pos) = token(b, pos).ok_or(MissingField("bytes"))?;
+    let bytes = match bytes {
+        b"-" => 0,
+        digits => parse_u64(digits).ok_or(InvalidNumber("bytes"))?,
     };
 
-    let (_referer, rest) = take_quoted(rest).ok_or(ParseError::MissingField("referer"))?;
-    let (user_agent, rest) = take_quoted(rest).ok_or(ParseError::MissingField("user_agent"))?;
-    let request_time = rest.trim().parse::<f64>().ok();
+    // "referer" "user agent" request_time
+    let ref_start = find(b, pos, b'"').ok_or(MissingField("referer"))? + 1;
+    let ref_end = find(b, ref_start, b'"').ok_or(MissingField("referer"))?;
+    let ua_start = find(b, ref_end + 1, b'"').ok_or(MissingField("user_agent"))? + 1;
+    let ua_end = find(b, ua_start, b'"').ok_or(MissingField("user_agent"))?;
+    let user_agent = &line[ua_start..ua_end];
+    let request_time = parse_seconds(line[ua_end + 1..].trim_ascii());
 
     Ok(RawEntry {
-        ip,
+        ip: &line[..ip_end],
         timestamp,
         date,
         seconds,
         zone,
-        hour,
+        hour: (seconds / 3600) as u8,
         method,
         path,
         status,
@@ -241,11 +233,66 @@ pub fn parse_line(line: &str) -> Result<RawEntry<'_>, ParseError> {
     })
 }
 
-/// Returns the first "..." block and the rest of the string.
-fn take_quoted(s: &str) -> Option<(&str, &str)> {
-    let start = s.find('"')? + 1;
-    let len = s[start..].find('"')?;
-    Some((&s[start..start + len], &s[start + len + 1..]))
+/// Position of the first `byte` at or after `from`.
+fn find(b: &[u8], from: usize, byte: u8) -> Option<usize> {
+    memchr::memchr(byte, b.get(from..)?).map(|p| from + p)
+}
+
+/// Next space-separated token at or after `from`, and the position after it.
+fn token(b: &[u8], from: usize) -> Option<(&[u8], usize)> {
+    let start = from + b.get(from..)?.iter().position(|&c| c != b' ')?;
+    let end = find(b, start, b' ').unwrap_or(b.len());
+    Some((&b[start..end], end))
+}
+
+/// Decimal digits only (no sign), with overflow check.
+fn parse_u64(digits: &[u8]) -> Option<u64> {
+    if digits.is_empty() {
+        return None;
+    }
+    digits.iter().try_fold(0u64, |n, &c| {
+        let d = c.wrapping_sub(b'0');
+        if d > 9 {
+            return None;
+        }
+        n.checked_mul(10)?.checked_add(d as u64)
+    })
+}
+
+/// Request time such as `0.123`. Plain decimals are converted directly
+/// (`123 / 1000` is correctly rounded, same result as `str::parse`);
+/// anything else falls back to the standard parser.
+fn parse_seconds(s: &str) -> Option<f64> {
+    if let Some((int, frac)) = s.split_once('.') {
+        if frac.len() <= 15 && !int.is_empty() && int.len() <= 3 {
+            if let (Some(i), Some(f)) = (parse_u64(int.as_bytes()), parse_u64(frac.as_bytes())) {
+                let scale = 10u64.pow(frac.len() as u32);
+                if let Some(n) = i.checked_mul(scale).and_then(|v| v.checked_add(f)) {
+                    if n < (1 << 53) {
+                        return Some(n as f64 / scale as f64);
+                    }
+                }
+            }
+        }
+    }
+    s.parse::<f64>().ok()
+}
+
+/// Splits `25/Oct/2026:13:55:36 +0300` into (`25/Oct/2026`, seconds of day, `+0300`).
+fn split_timestamp(ts: &str) -> Option<(&str, u32, &str)> {
+    let b = ts.as_bytes();
+    let colon = find(b, 0, b':')?;
+    let (time_end, zone) = match find(b, colon, b' ') {
+        Some(sp) => (sp, &ts[sp + 1..]),
+        None => (b.len(), ""),
+    };
+    let mut parts = b[colon + 1..time_end].split(|&c| c == b':');
+    let mut next = || parts.next().and_then(parse_u64);
+    let (h, m, s) = (next()?, next()?, next()?);
+    if parts.next().is_some() || h > 23 || m > 59 || s > 60 {
+        return None;
+    }
+    Some((&ts[..colon], (h * 3600 + m * 60 + s) as u32, zone))
 }
 
 /// Parse result: successful entries and number of failed lines.
@@ -298,6 +345,132 @@ mod tests {
     use super::*;
 
     const SAMPLE: &str = r#"192.168.1.10 - - [25/Oct/2026:13:55:36 +0300] "GET /api/products?id=3 HTTP/1.1" 200 1534 "-" "Mozilla/5.0 (X11; Linux x86_64)" 0.123"#;
+
+    /// The previous `str`-based implementation, kept as a reference: the
+    /// byte-level parser must give exactly the same results.
+    mod reference {
+        use super::super::{ParseError, RawEntry};
+
+        /// Splits `25/Oct/2026:13:55:36 +0300` into (`25/Oct/2026`, seconds of day, `+0300`).
+        fn split_timestamp(ts: &str) -> Option<(&str, u32, &str)> {
+            let (date, rest) = ts.split_once(':')?;
+            let (time, zone) = rest.split_once(' ').unwrap_or((rest, ""));
+            let mut parts = time.split(':').map(|p| p.parse::<u32>().ok());
+            let (h, m, s) = (parts.next()??, parts.next()??, parts.next()??);
+            if h > 23 || m > 59 || s > 60 {
+                return None;
+            }
+            Some((date, h * 3600 + m * 60 + s, zone))
+        }
+
+        /// Parse a single log line
+        pub fn parse_line(line: &str) -> Result<RawEntry<'_>, ParseError> {
+            let line = line.trim();
+            let (ip, rest) = line.split_once(' ').ok_or(ParseError::MissingField("ip"))?;
+            let rest = rest
+                .split_once('[')
+                .ok_or(ParseError::MissingField("timestamp"))?
+                .1;
+
+            let (timestamp, rest) = rest
+                .split_once(']')
+                .ok_or(ParseError::MissingField("timestamp"))?;
+
+            let (date, seconds, zone) =
+                split_timestamp(timestamp).ok_or(ParseError::InvalidNumber("time"))?;
+            let hour = (seconds / 3600) as u8;
+
+            let (request, rest) = take_quoted(rest).ok_or(ParseError::MissingField("request"))?;
+            let mut parts = request.split_whitespace();
+            let method = parts.next().ok_or(ParseError::MissingField("method"))?;
+            let path = parts.next().ok_or(ParseError::MissingField("path"))?;
+            let mut nums = rest.split_whitespace();
+            let status = nums
+                .next()
+                .ok_or(ParseError::MissingField("status"))?
+                .parse::<u16>()
+                .map_err(|_| ParseError::InvalidNumber("status"))?;
+
+            let bytes = match nums.next().ok_or(ParseError::MissingField("bytes"))? {
+                "-" => 0,
+                b => b
+                    .parse::<u64>()
+                    .map_err(|_| ParseError::InvalidNumber("bytes"))?,
+            };
+
+            let (_referer, rest) = take_quoted(rest).ok_or(ParseError::MissingField("referer"))?;
+            let (user_agent, rest) = take_quoted(rest).ok_or(ParseError::MissingField("user_agent"))?;
+            let request_time = rest.trim().parse::<f64>().ok();
+
+            Ok(RawEntry {
+                ip,
+                timestamp,
+                date,
+                seconds,
+                zone,
+                hour,
+                method,
+                path,
+                status,
+                bytes,
+                user_agent,
+                request_time,
+            })
+        }
+
+        /// Returns the first "..." block and the rest of the string.
+        fn take_quoted(s: &str) -> Option<(&str, &str)> {
+            let start = s.find('"')? + 1;
+            let len = s[start..].find('"')?;
+            Some((&s[start..start + len], &s[start + len + 1..]))
+        }
+    }
+
+    fn sample_lines() -> Vec<String> {
+        let ok = SAMPLE.to_string();
+        vec![
+            ok.clone(),
+            ok.replace(" 0.123", ""),
+            ok.replace(" 0.123", " 1.5"),
+            ok.replace(" 0.123", " 12"),
+            ok.replace(" 0.123", " 1e-3"),
+            ok.replace(" 0.123", " -"),
+            ok.replace(" 1534 ", " - "),
+            ok.replace(" 1534 ", " 99999999999999999999999 "),
+            ok.replace(" 200 ", " 70000 "),
+            ok.replace(" 200 ", " 2x0 "),
+            ok.replace(" 200 ", "  200  "),
+            ok.replace("13:55:36", "24:00:00"),
+            ok.replace("13:55:36", "13:55"),
+            ok.replace("13:55:36 +0300", "13:55:36"),
+            ok.replace("\"GET /api/products?id=3 HTTP/1.1\"", "\"GET\""),
+            ok.replace("\"GET /api/products?id=3 HTTP/1.1\"", "\"-\""),
+            ok.replace("\"Mozilla/5.0 (X11; Linux x86_64)\"", "\"Mozilla/5.0 (çğış; ü)\""),
+            format!("  {ok}\r"),
+            ok[..40].to_string(),
+            ok[..80].to_string(),
+            String::new(),
+            "bu bir log satırı değil".to_string(),
+        ]
+    }
+
+    #[test]
+    fn matches_reference_parser() {
+        for line in sample_lines() {
+            assert_eq!(parse_line(&line), reference::parse_line(&line), "line: {line:?}");
+        }
+    }
+
+    #[test]
+    fn matches_reference_parser_on_generated_logs() {
+        // tools/logs_gen.py output, if it was generated (samples/*.log are not committed).
+        let Ok(text) = std::fs::read_to_string("samples/bench_10000.log") else {
+            return;
+        };
+        for line in text.lines() {
+            assert_eq!(parse_line(line), reference::parse_line(line), "line: {line:?}");
+        }
+    }
 
     #[test]
     fn parses_full_line() {
