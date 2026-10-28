@@ -13,7 +13,9 @@
 //      inputs as the native criterion benchmarks)
 //   3. Serves dist/ with a tiny static server and opens it in the browser
 //   4. For every size: 1 warm-up + N measured page loads, reports the median of
-//      - loglens:read / copy / parse     (performance.measure entries set by the app)
+//      - loglens:read / copy / parse     (performance.measure entries set by the app;
+//                                         with streaming they overlap each other)
+//      - data ready                      (file pick until the loglens:ready mark)
 //      - load -> dashboard painted       (file pick until two animation frames later)
 //      - status filter / path search     (input event until two animation frames later)
 //   5. Writes a Markdown table between the BENCH-BROWSER markers in README.md
@@ -138,12 +140,20 @@ function armLoadProbe() {
     window.addEventListener("loglens:loaded", () => {
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
-          const start = performance.getEntriesByName("loglens:read:start").at(-1).startTime;
+          const entry = (name) => performance.getEntriesByName(name).at(-1);
+          const start = entry("loglens:read:start").startTime;
+          const parse = entry("loglens:parse");
+          // "loglens:ready" marks the moment the entries exist (streaming loader);
+          // older versions end with the parse measure.
+          const readyAt = entry("loglens:ready")?.startTime ?? parse.startTime + parse.duration;
+          const now = performance.now();
           resolve({
-            total: performance.now() - start,
-            read: performance.getEntriesByName("loglens:read").at(-1).duration,
-            copy: performance.getEntriesByName("loglens:copy").at(-1).duration,
-            parse: performance.getEntriesByName("loglens:parse").at(-1).duration,
+            total: now - start,
+            ready: readyAt - start,
+            render: now - readyAt,
+            read: entry("loglens:read").duration,
+            copy: entry("loglens:copy")?.duration,
+            parse: parse.duration,
           });
         }),
       );
@@ -167,7 +177,7 @@ const PATH = ".filters input[type=search]";
 
 async function measureSize(browser, baseUrl, n) {
   const file = join(ROOT, "samples", `bench_${n}.log`);
-  const samples = { read: [], copy: [], parse: [], render: [], total: [], status: [], path: [] };
+  const samples = { read: [], copy: [], parse: [], ready: [], render: [], total: [], status: [], path: [] };
 
   for (let i = 0; i <= RUNS; i++) {
     const context = await browser.newContext();
@@ -189,14 +199,15 @@ async function measureSize(browser, baseUrl, n) {
     const label = i === 0 ? "warm-up" : `run ${i}/${RUNS}`;
     console.log(
       `  ${String(n).padStart(7)} ${label.padEnd(9)} read ${fmtMs(load.read)}, copy ${fmtMs(load.copy)}, ` +
-        `parse ${fmtMs(load.parse)}, ` +
+        `parse ${fmtMs(load.parse)}, ready ${fmtMs(load.ready)}, ` +
         `total ${fmtMs(load.total)}, status ${fmtMs(status)}, path ${fmtMs(path)}`,
     );
     if (i === 0) continue; // discard warm-up
     samples.read.push(load.read);
     samples.copy.push(load.copy);
-    // Whatever is left: Memo chain + first DOM render + paint.
-    samples.render.push(load.total - load.read - load.copy - load.parse);
+    samples.ready.push(load.ready);
+    // From "data ready" until painted: Memo chain + first DOM render + paint.
+    samples.render.push(load.render);
     samples.parse.push(load.parse);
     samples.total.push(load.total);
     samples.status.push(status);
@@ -227,9 +238,10 @@ function buildTable(results, env) {
   const lines = [
     head,
     sep,
-    row("Dosya okuma (`File.arrayBuffer()`)", (n) => fmtMs(results[n].read)),
-    row("JS → WASM kopyası (byte kopyası + UTF-8 doğrulama)", (n) => fmtMs(results[n].copy)),
-    row("Ayrıştırma (WASM, parçalı)", (n) => fmtMs(results[n].parse)),
+    row("Dosya okuma (`File.stream()`, son byte'a kadar)", (n) => fmtMs(results[n].read)),
+    row("JS → WASM kopyası (parçaların toplamı)", (n) => fmtMs(results[n].copy)),
+    row("Ayrıştırma (WASM, parçaların toplamı)", (n) => fmtMs(results[n].parse)),
+    row("Dosya seçimi → kayıtlar hazır", (n) => fmtMs(results[n].ready)),
     row("İlk çizim (Memo'lar + DOM + boyama)", (n) => fmtMs(results[n].render)),
     row("Dosya seçimi → panel ekranda", (n) => fmtMs(results[n].total)),
     row("Status filtresi (5xx) → ekranda", (n) => fmtMs(results[n].status)),

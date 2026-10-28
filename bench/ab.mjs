@@ -21,7 +21,8 @@
 
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, openSync, closeSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, openSync, closeSync, statSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, extname, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -99,10 +100,15 @@ function ensureInput() {
 
 /** Builds a git ref (or "." = working tree) and returns { label, dist, cleanup }. */
 function prepare(ref) {
-  // Shared target dir: dependencies are compiled once for both versions.
-  const env = { ...process.env, CARGO_TARGET_DIR: join(ROOT, "target") };
+  // The working tree and the git worktrees must NOT share a target dir. Cargo
+  // decides whether a local crate is up to date by comparing file modification
+  // times with its last build. If a worktree was built after the working tree's
+  // files were edited, the working tree looks "fresh" and cargo silently reuses
+  // the other version's library: both sides then run the same code.
+  // Worktrees are always freshly checked out (newer files), so they can share
+  // one target dir with each other; dependencies are compiled only once there.
   if (ref === ".") {
-    run("trunk", ["build", "--release"], { env });
+    run("trunk", ["build", "--release"], { env: { ...process.env, CARGO_TARGET_DIR: join(ROOT, "target") } });
     return { label: "çalışma kopyası", dist: join(ROOT, "dist"), cleanup: () => {} };
   }
   let sha;
@@ -115,7 +121,10 @@ function prepare(ref) {
   const dir = join(ROOT, ".bench-ab", sha);
   if (existsSync(dir)) git(["worktree", "remove", "--force", dir]);
   run("git", ["worktree", "add", "--detach", dir, sha]);
-  run("trunk", ["build", "--release"], { cwd: dir, env });
+  run("trunk", ["build", "--release"], {
+    cwd: dir,
+    env: { ...process.env, CARGO_TARGET_DIR: join(ROOT, ".bench-ab", "target") },
+  });
   const label = ref === sha ? sha : `${ref} (${sha})`;
   return {
     label,
@@ -154,11 +163,18 @@ function armLoadProbe() {
           requestAnimationFrame(() => {
             const entry = (name) => performance.getEntriesByName(name).at(-1);
             const start = entry("loglens:read:start").startTime;
+            const parse = entry("loglens:parse");
+            // "loglens:ready" marks the moment the entries exist (streaming loader);
+            // older versions end with the parse measure.
+            const readyAt = entry("loglens:ready")?.startTime ?? parse.startTime + parse.duration;
+            const now = performance.now();
             resolve({
-              total: performance.now() - start,
+              total: now - start,
+              ready: readyAt - start,
+              render: now - readyAt,
               read: entry("loglens:read")?.duration,
               copy: entry("loglens:copy")?.duration,
-              parse: entry("loglens:parse")?.duration,
+              parse: parse.duration,
             });
           }),
         );
@@ -204,7 +220,7 @@ async function measureOnce(browser, url, file) {
   const path = await page.evaluate(measureInput, [PATH, "checkout", "input"]);
   await page.evaluate(measureInput, [PATH, "", "input"]);
   await context.close();
-  return { ...load, render: load.total - (load.read ?? 0) - (load.copy ?? 0) - (load.parse ?? 0), status, path };
+  return { ...load, status, path };
 }
 
 // ---------- main ----------
@@ -222,6 +238,15 @@ const file = ensureInput();
 const [refA, refB] = positional;
 const A = prepare(refA);
 const B = prepare(refB);
+
+// Safety net: two different versions should not produce the same binary.
+const wasmHash = (dist) => {
+  const file = readdirSync(dist).find((f) => f.endsWith("_bg.wasm"));
+  return createHash("sha256").update(readFileSync(join(dist, file))).digest("hex");
+};
+if (wasmHash(A.dist) === wasmHash(B.dist)) {
+  console.warn("\nUYARI: A ve B aynı .wasm dosyasını üretti; iki taraf aynı kodu ölçecek.\n");
+}
 const servers = await Promise.all([serve(A.dist), serve(B.dist)]);
 const urls = servers.map((s) => `http://127.0.0.1:${s.address().port}/`);
 
@@ -265,7 +290,8 @@ try {
 const rows = [
   ["read", "Dosya okuma"],
   ["copy", "JS → WASM kopyası"],
-  ["parse", "Ayrıştırma (WASM)"],
+  ["parse", "Ayrıştırma (WASM, CPU)"],
+  ["ready", "Dosya seçimi → kayıtlar hazır"],
   ["render", "İlk çizim"],
   ["total", "Dosya seçimi → panel ekranda"],
   ["status", "Status filtresi → ekranda"],

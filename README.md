@@ -139,8 +139,9 @@ Her adım ayrı bir commit; değerler 500.000 satırlık sütundan (medyan). Nat
 | | | `summarize` (native) | 14.54 ms | 6.53 ms (−%55) |
 | | | Ayrıştırma (Firefox) | 323 ms | 383 ms (+%19)² |
 | | | Dosya seçimi → panel ekranda | 573 ms | 660 ms (+%15)² |
-| 5 | Sadece gösterilen alanları kopyalamamak: zaman damgası ve user agent kayıtta tutulmaz, ekrandaki satırlar dosya metninden yeniden okunur; hash araması satır başına 6'dan 2'ye iner, küçük tablolarda düz tarama | Ayrıştırma (Firefox, A/B: 3. adıma karşı) | 335 ms | 344 ms (fark yok, 5/10 tur)³ |
-| | | Dosya seçimi → panel ekranda (A/B: 3. adıma karşı) | 582 ms | 589 ms (fark yok, 3/10 tur)³ |
+| 5 | Sadece gösterilen alanları kopyalamamak: zaman damgası ve user agent kayıtta tutulmaz, ekrandaki satırlar dosya metninden yeniden okunur; hash araması satır başına 6'dan 2'ye iner, küçük tablolarda düz tarama | Ayrıştırma (Firefox, A/B: 3. adıma karşı) | 305 ms | 306 ms (fark yok, 4/10 tur)³ |
+| | | İlk çizim (A/B: 3. adıma karşı) | 43.7 ms | **34.6 ms (−%21, 10/10 tur)**³ |
+| | | Dosya seçimi → panel ekranda (A/B: 3. adıma karşı) | 542 ms | 538 ms (fark yok, 6/10 tur)³ |
 | | | Ayrıştırma (native) | 243.59 ms | 6. adımla birlikte ölçüldü |
 | 6 | Byte düzeyinde, tek geçişli ayrıştırıcı: `split_*` yineleyicileri ve standart sayı ayrıştırıcıları yerine `memchr` ile ayraç arama ve elle sayı çevirme; eski ayrıştırıcı testlerde referans olarak tutulur, sonuçlar birebir aynı | Ayrıştırma (Firefox, A/B: 5. adıma karşı) | 292 ms | **263 ms (−%10, 10/10 tur)**⁴ |
 | | | Dosya seçimi → panel ekranda (A/B) | 505 ms | 481 ms (−%5, 8/10 tur)⁴ |
@@ -150,7 +151,7 @@ Her adım ayrı bir commit; değerler 500.000 satırlık sütundan (medyan). Nat
 
 ² A/B ölçümüyle doğrulandı (`npm run bench:ab -- 34e3d75 421b7e4`, 10 tur): Firefox'ta ayrıştırma +%16 yavaş (B yalnızca 1/10 turda hızlı), ilk çizim −%17 hızlı (10/10 tur). Kayıt başına 6 hash araması, Firefox'un WASM motorunda 4 `String` ayırmaktan pahalıya geldi; native ve V8'de ise kazançlıydı.
 
-³ `npm run bench:ab -- 34e3d75 .` ile, aynı Firefox oturumunda dönüşümlü 10 tur. 4. adımdaki Firefox yavaşlaması ortadan kalktı; native ve V8'deki kazançlar korunuyor. Bedeli: dosya metni yükleme sonrasında bellekte kalır (500k satırda ~70 MB).
+³ `npm run bench:ab -- 34e3d75 d7c8073` ile, aynı Firefox oturumunda dönüşümlü 10 tur. 4. adımdaki ayrıştırma yavaşlaması ortadan kalktı, ilk çizimdeki kazanç korundu; native ve V8'deki kazançlar da korunuyor. Bedeli: dosya metni yükleme sonrasında bellekte kalır (500k satırda ~70 MB). _Düzeltme:_ bu adım ilk olarak `34e3d75 .` ile ölçülmüştü; A/B aracındaki bir hata yüzünden (iki taraf aynı Cargo `target` klasörünü paylaşıyordu) o ölçümde B tarafı da A'nın koduyla derlenmişti. Değerler commit'ler arasında yeniden ölçüldü.
 
 ⁴ `npm run bench:ab -- HEAD .` ile, aynı Firefox oturumunda dönüşümlü 10 tur.
 
