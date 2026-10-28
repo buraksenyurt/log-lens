@@ -75,12 +75,29 @@ npm run bench -- --browser chromium   # başka motorla karşılaştırma (README
 ```
 
 - Her boyut için 1 ısınma + 5 ölçüm turu yapılır, her tur yeni bir sekmede başlar; tabloda medyan değerler yer alır.
-- "→ ekranda" süreleri, olay tetiklendikten sonra iki animasyon karesi geçene kadar, yani sonuç boyanana kadar ölçülür.
+- "→ ekranda" süreleri, olay tetiklendikten sonra iki animasyon karesi geçene kadar, yani sonuç boyanana kadar ölçülür. Bu yöntemin alt sınırı 60 Hz'de yaklaşık 1–2 karedir (~16–33 ms); bu aralıktaki değerler kullanıcı için "anında" demektir ve küçük farklar ölçüm gürültüsüdür.
 - Native satırı ve WASM / native oranı, `python tools/bench_native.py` ile alınan son criterion sonuçlarından okunur.
 - Firefox varsayılan olarak `performance.now()` hassasiyetini düşürür; ölçüm sırasında `privacy.reduceTimerPrecision` kapatılır.
 
 <!-- BENCH-BROWSER:START -->
-_Henüz ölçüm yapılmadı. `npm run bench` komutunu çalıştırın._
+| Ölçüm | 10.000 satır | 100.000 satır | 500.000 satır |
+|---|---:|---:|---:|
+| Dosya okuma (`File.text()`) | 5.12 ms | 57.1 ms | 281 ms |
+| JS → WASM metin kopyası (UTF-16 → UTF-8) | 3.40 ms | 36.7 ms | 176 ms |
+| Ayrıştırma (WASM, parçalı) | 6.54 ms | 72.1 ms | 351 ms |
+| İlk çizim (Memo'lar + DOM + boyama) | 17.5 ms | 48.2 ms | 118 ms |
+| Dosya seçimi → panel ekranda | 32.3 ms | 214 ms | 924 ms |
+| Status filtresi (5xx) → ekranda | 14.0 ms | 23.5 ms | 34.9 ms |
+| Path araması (checkout) → ekranda | 37.9 ms | 37.3 ms | 60.6 ms |
+| Native ayrıştırma (criterion) | 5.88 ms | 56.4 ms | 280 ms |
+| WASM / native ayrıştırma oranı | 1.11× | 1.28× | 1.25× |
+
+- **Tarih:** 2026-10-28
+- **Tarayıcı:** Firefox 157.0 (Playwright 1.64.1, headless: true)
+- **CPU:** 12th Gen Intel(R) Core(TM) i7-1255U
+- **İşletim sistemi:** Windows 11 (build 26300, x64)
+- **.wasm boyutu:** 506 KB (gzip: 172 KB)
+- **Yöntem:** 5 ölçüm + 1 ısınma turu, her tur yeni sekme; değerler medyandır. Ayrıştırma, UI'ı dondurmamak için parçalar arasında tarayıcıya kontrol verdiğinden native süreyle birebir aynı iş değildir.
 <!-- BENCH-BROWSER:END -->
 
 ## Örnek Çalışma Zamanı Görüntüleri

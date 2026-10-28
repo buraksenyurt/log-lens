@@ -210,7 +210,12 @@ function cpuName() {
 }
 
 function osName() {
-  const names = { Windows_NT: "Windows", Darwin: "macOS", Linux: "Linux" };
+  if (os.type() === "Windows_NT") {
+    // os.release() reports 10.0.<build> on both Windows 10 and 11; builds >= 22000 are Windows 11.
+    const build = Number(os.release().split(".")[2] ?? 0);
+    return `Windows ${build >= 22000 ? 11 : 10} (build ${build}, ${os.arch()})`;
+  }
+  const names = { Darwin: "macOS", Linux: "Linux" };
   return `${names[os.type()] ?? os.type()} ${os.release()} (${os.arch()})`;
 }
 
