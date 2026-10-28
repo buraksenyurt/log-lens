@@ -38,7 +38,20 @@ python tools/bench_native.py --skip-bench  # sadece son sonuçlardan tabloyu yen
 - Ölçüm sırasında dizüstü bilgisayarı prize takılı tutmak ve diğer uygulamaları kapatmak sonuçları daha kararlı hale getirir.
 
 <!-- BENCH-NATIVE:START -->
-_Henüz ölçüm yapılmadı. `python tools/bench_native.py` komutunu çalıştırın._
+| İşlem | 10.000 satır | 100.000 satır | 500.000 satır |
+|---|---:|---:|---:|
+| Ayrıştırma (parse_all) | 5.88 ms | 56.36 ms | 279.59 ms |
+| Filtreleme (5xx + checkout) | 49.6 µs | 917.0 µs | 5.80 ms |
+| Özet istatistik (summarize) | 306.8 µs | 4.03 ms | 21.34 ms |
+| Saatlik dağılım (hourly) | 18.6 µs | 370.8 µs | 2.85 ms |
+| Top endpoint'ler (top_endpoints) | 280.2 µs | 3.70 ms | 18.20 ms |
+| Ayrıştırma hızı | 1.7 M satır/sn | 1.8 M satır/sn | 1.8 M satır/sn |
+
+- **Tarih:** 2026-10-28
+- **CPU:** 12th Gen Intel(R) Core(TM) i7-1255U
+- **İşletim sistemi:** Windows 11 (AMD64)
+- **Derleyici:** rustc 1.98.0 (88d9e12ae 2026-08-18), `bench` profili (release + LTO)
+- **Veri:** `tools/logs_gen.py` (seed 42), değerler criterion medyanıdır
 <!-- BENCH-NATIVE:END -->
 
 ## Örnek Çalışma Zamanı Görüntüleri
