@@ -4,6 +4,8 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{DragEvent, File, HtmlInputElement};
 
+use crate::perf;
+
 /// Select file and drag-and-drop area.
 /// When the file is read, the `on_load` callback is called with (file name, content).
 #[component]
@@ -13,12 +15,20 @@ pub fn FileDrop(on_load: Callback<(String, String)>) -> impl IntoView {
 
     let read_file = move |file: File| {
         let name = file.name();
+        perf::mark("loglens:read:start");
 
         spawn_local(async move {
             match JsFuture::from(file.text()).await {
                 Ok(js) => {
+                    perf::mark("loglens:read:end");
+                    perf::measure("loglens:read", "loglens:read:start", "loglens:read:end");
+                    // Crossing the JS -> WASM boundary: the UTF-16 JS string is copied
+                    // into WASM memory as UTF-8. Measured separately because it is not free.
+                    let text = js.as_string().unwrap_or_default();
+                    perf::mark("loglens:copy:end");
+                    perf::measure("loglens:copy", "loglens:read:end", "loglens:copy:end");
                     set_error.set(None);
-                    on_load.run((name, js.as_string().unwrap_or_default()));
+                    on_load.run((name, text));
                 }
                 Err(_) => set_error.set(Some(format!("{name} okunamadı"))),
             }

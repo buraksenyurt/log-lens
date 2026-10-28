@@ -1,0 +1,12 @@
+{
+  "name": "log-lens-bench",
+  "private": true,
+  "type": "module",
+  "description": "Browser (Firefox) benchmarks for Log Lens",
+  "scripts": {
+    "bench": "node bench/browser.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
+}

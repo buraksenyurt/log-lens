@@ -7,6 +7,7 @@ use crate::components::{
 };
 use crate::filter::Filters;
 use crate::parser::{LogEntry, ParseResult};
+use crate::perf;
 use crate::stats::{hourly, summarize, top_endpoints};
 use gloo_timers::future::TimeoutFuture;
 use leptos::prelude::*;
@@ -42,6 +43,7 @@ pub fn App() -> impl IntoView {
         progress.set(Some(0.0));
         spawn_local(async move {
             let start = now_ms();
+            perf::mark("loglens:parse:start");
             let total = text.len().max(1);
             let mut consumed = 0;
             let mut result = ParseResult::default();
@@ -59,6 +61,8 @@ pub fn App() -> impl IntoView {
                 progress.set(Some(consumed as f64 / total as f64));
                 TimeoutFuture::new(0).await;
             }
+            perf::mark("loglens:parse:end");
+            perf::measure("loglens:parse", "loglens:parse:start", "loglens:parse:end");
             load_count.update_value(|c| *c += 1);
             dataset.set(Some(Dataset {
                 id: load_count.get_value(),
@@ -68,6 +72,7 @@ pub fn App() -> impl IntoView {
                 parse_ms: now_ms() - start,
             }));
             progress.set(None);
+            perf::notify("loglens:loaded");
         });
     });
 

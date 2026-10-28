@@ -54,6 +54,35 @@ python tools/bench_native.py --skip-bench  # sadece son sonuçlardan tabloyu yen
 - **Veri:** `tools/logs_gen.py` (seed 42), değerler criterion medyanıdır
 <!-- BENCH-NATIVE:END -->
 
+### Tarayıcı ölçümleri (Firefox, uçtan uca)
+
+Uygulamanın release build'i [Playwright](https://playwright.dev) ile headless Firefox'ta açılır, aynı `samples/bench_*.log` dosyaları yüklenir ve kullanıcının gördüğü süreler ölçülür. Uygulama; dosya okuma, JS'ten WASM'a metin kopyası ve ayrıştırma adımlarını `performance.measure` ile (`loglens:read`, `loglens:copy`, `loglens:parse`) işaretler; bu ölçümler Firefox profiler'ında da görünür.
+
+İlk kurulum (bir kez):
+
+```bash
+npm install
+npx playwright install firefox
+```
+
+Ölçüm:
+
+```bash
+npm run bench                         # trunk build --release + ölçüm + README güncelleme
+npm run bench -- --skip-build         # mevcut dist/ ile ölç
+npm run bench -- --runs 7 --headed    # daha fazla tur, tarayıcıyı görerek
+npm run bench -- --browser chromium   # başka motorla karşılaştırma (README güncellenmez)
+```
+
+- Her boyut için 1 ısınma + 5 ölçüm turu yapılır, her tur yeni bir sekmede başlar; tabloda medyan değerler yer alır.
+- "→ ekranda" süreleri, olay tetiklendikten sonra iki animasyon karesi geçene kadar, yani sonuç boyanana kadar ölçülür.
+- Native satırı ve WASM / native oranı, `python tools/bench_native.py` ile alınan son criterion sonuçlarından okunur.
+- Firefox varsayılan olarak `performance.now()` hassasiyetini düşürür; ölçüm sırasında `privacy.reduceTimerPrecision` kapatılır.
+
+<!-- BENCH-BROWSER:START -->
+_Henüz ölçüm yapılmadı. `npm run bench` komutunu çalıştırın._
+<!-- BENCH-BROWSER:END -->
+
 ## Örnek Çalışma Zamanı Görüntüleri
 
 ![Runtime 00](runtime_00.png)

@@ -7,3 +7,6 @@
 
 # Ignore log files
 *.log
+
+# Node (browser benchmarks)
+node_modules/

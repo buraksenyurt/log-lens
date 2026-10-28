@@ -18,6 +18,8 @@ web-sys = { version = "0.3.106", features = [
     "DragEvent",
     "DataTransfer",
     "Performance",
+    "Event",
+    "EventTarget",
 ] }
 
 [dev-dependencies]
