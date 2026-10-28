@@ -102,13 +102,16 @@ npm run bench -- --browser chromium   # başka motorla karşılaştırma (README
 
 ### Optimizasyon günlüğü
 
-Her adım ayrı bir commit; değerler Firefox ölçümünün 500.000 satırlık sütunundan (medyan).
+Her adım ayrı bir commit; değerler 500.000 satırlık sütundan (medyan). Native satırlar criterion, diğerleri Firefox ölçümüdür.
 
 | # | Değişiklik | Ölçüm | Önce | Sonra |
 |---|---|---|---:|---:|
 | 1 | `File.text()` yerine `File.arrayBuffer()`: UTF-8 → UTF-16 → UTF-8 dönüşümleri yerine tek byte kopyası | Dosya okuma | 281 ms | 152 ms (−%46) |
 | | | JS → WASM kopyası | 176 ms | 29.1 ms (−%83) |
 | | | Dosya seçimi → panel ekranda | 924 ms | **589 ms (−%36)** |
+| 2 | İstatistikler: SipHash yerine `FxHash` (rustc-hash), p95 için tam sıralama yerine `select_nth_unstable` | `summarize` (native) | 21.34 ms | _ölçülecek_ |
+| | | `top_endpoints` (native) | 18.20 ms | _ölçülecek_ |
+| | | Path araması → ekranda | 57.7 ms | _ölçülecek_ |
 
 ## Örnek Çalışma Zamanı Görüntüleri
 

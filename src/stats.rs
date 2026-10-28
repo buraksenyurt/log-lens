@@ -1,6 +1,8 @@
 //! Raw computation of log statistics.
 use crate::parser::LogEntry;
-use std::collections::{HashMap, HashSet};
+// FxHash: a much faster (non-cryptographic) hasher than the default SipHash.
+// HashDoS resistance is irrelevant here: the data comes from the user's own file.
+use rustc_hash::{FxHashMap, FxHashSet};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Summary {
@@ -25,7 +27,7 @@ impl Summary {
 
 pub fn summarize<'a>(entries: impl Iterator<Item = &'a LogEntry>) -> Summary {
     let mut s = Summary::default();
-    let mut ips = HashSet::new();
+    let mut ips = FxHashSet::default();
     let mut times = Vec::new();
     for e in entries {
         s.total += 1;
@@ -44,9 +46,10 @@ pub fn summarize<'a>(entries: impl Iterator<Item = &'a LogEntry>) -> Summary {
     s.unique_ips = ips.len();
     if !times.is_empty() {
         s.avg_ms = Some(times.iter().sum::<f64>() / times.len() as f64);
-        times.sort_by(|a, b| a.total_cmp(b));
-        let idx = ((times.len() as f64) * 0.95).ceil() as usize - 1;
-        s.p95_ms = Some(times[idx.min(times.len() - 1)]);
+        let idx = (((times.len() as f64) * 0.95).ceil() as usize - 1).min(times.len() - 1);
+        // O(n) selection instead of a full O(n log n) sort: only one percentile is needed.
+        let (_, p95, _) = times.select_nth_unstable_by(idx, |a, b| a.total_cmp(b));
+        s.p95_ms = Some(*p95);
     }
     s
 }
@@ -98,7 +101,7 @@ pub fn top_endpoints<'a>(
     entries: impl Iterator<Item = &'a LogEntry>,
     n: usize,
 ) -> Vec<EndpointStat> {
-    let mut map: HashMap<&str, (usize, usize, f64, usize)> = HashMap::new();
+    let mut map: FxHashMap<&str, (usize, usize, f64, usize)> = FxHashMap::default();
     for e in entries {
         let path = e.path.split('?').next().unwrap_or(&e.path);
         let slot = map.entry(path).or_default();
@@ -154,6 +157,17 @@ mod tests {
         assert_eq!(s.error_rate(), 50.0);
         assert!((s.avg_ms.unwrap() - 250.0).abs() < 1e-9);
         assert!((s.p95_ms.unwrap() - 400.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn p95_on_unsorted_input() {
+        // 1..=100 ms in a scrambled order: the 95th percentile must be 95 ms,
+        // exactly what a full sort would give.
+        let data: Vec<LogEntry> = (0..100)
+            .map(|i| entry("1.1.1.1", 200, ((i * 37) % 100 + 1) as f64 / 1000.0))
+            .collect();
+        let s = summarize(data.iter());
+        assert!((s.p95_ms.unwrap() - 95.0).abs() < 1e-9);
     }
 
     #[test]

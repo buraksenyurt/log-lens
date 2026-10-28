@@ -1040,6 +1040,7 @@ dependencies = [
  "gloo-timers",
  "js-sys",
  "leptos",
+ "rustc-hash",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
