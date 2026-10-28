@@ -114,6 +114,11 @@ Her adım ayrı bir commit; değerler 500.000 satırlık sütundan (medyan). Nat
 | | | İlk çizim (Memo'lar + DOM + boyama) | 98.8 ms | 74.9 ms (−%24) |
 | | | Dosya seçimi → panel ekranda | 589 ms | **544 ms (−%8)** |
 | | | Path araması → ekranda | 57.7 ms | 57.5 ms (değişim yok) |
+| 3 | Path interning: her farklı path bir kez saklanır, kayıtlar sadece numarasını tutar (`PathTable`); path araması farklı path başına bir kez yapılır, `top_endpoints` hash tablosu yerine dizi sayacı kullanır | Path araması → ekranda | 57.5 ms | _ölçülecek_ |
+| | | `top_endpoints` (native) | 16.23 ms | _ölçülecek_ |
+| | | Filtreleme, 5xx + checkout (native) | 6.46 ms | _ölçülecek_ |
+| | | Ayrıştırma (native) | 282.08 ms | _ölçülecek_ |
+| | | Dosya seçimi → panel ekranda | 544 ms | _ölçülecek_ |
 
 ## Örnek Çalışma Zamanı Görüntüleri
 

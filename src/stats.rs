@@ -1,8 +1,8 @@
 //! Raw computation of log statistics.
-use crate::parser::LogEntry;
+use crate::parser::{LogEntry, PathTable};
 // FxHash: a much faster (non-cryptographic) hasher than the default SipHash.
 // HashDoS resistance is irrelevant here: the data comes from the user's own file.
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Summary {
@@ -99,12 +99,15 @@ pub struct EndpointStat {
 /// Most requested endpoints. Query string ("?q=...") is ignored in grouping.
 pub fn top_endpoints<'a>(
     entries: impl Iterator<Item = &'a LogEntry>,
+    paths: &PathTable,
     n: usize,
 ) -> Vec<EndpointStat> {
-    let mut map: FxHashMap<&str, (usize, usize, f64, usize)> = FxHashMap::default();
+    // Endpoints are already numbered by the PathTable, so a plain array of
+    // counters replaces the hash map: no hashing, no string handling per entry.
+    // (count, 5xx, total ms, entries with a request time)
+    let mut slots = vec![(0usize, 0usize, 0.0f64, 0usize); paths.endpoint_count()];
     for e in entries {
-        let path = e.path.split('?').next().unwrap_or(&e.path);
-        let slot = map.entry(path).or_default();
+        let slot = &mut slots[paths.endpoint_of(e.path_id) as usize];
         slot.0 += 1;
         if e.status >= 500 {
             slot.1 += 1;
@@ -114,10 +117,12 @@ pub fn top_endpoints<'a>(
             slot.3 += 1;
         }
     }
-    let mut list: Vec<EndpointStat> = map
+    let mut list: Vec<EndpointStat> = slots
         .into_iter()
-        .map(|(path, (count, errors, sum, timed))| EndpointStat {
-            path: path.to_string(),
+        .enumerate()
+        .filter(|(_, slot)| slot.0 > 0)
+        .map(|(id, (count, errors, sum, timed))| EndpointStat {
+            path: paths.endpoint(id as u32).to_string(),
             count,
             errors,
             avg_ms: if timed > 0 { sum / timed as f64 } else { 0.0 },
@@ -131,13 +136,16 @@ pub fn top_endpoints<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::parse_line;
+    use crate::parser::ParseResult;
+
+    fn line(ip: &str, status: u16, rt: f64) -> String {
+        format!(r#"{ip} - - [25/Oct/2026:10:00:00 +0300] "GET / HTTP/1.1" {status} 100 "-" "ua" {rt}"#)
+    }
 
     fn entry(ip: &str, status: u16, rt: f64) -> LogEntry {
-        let line = format!(
-            r#"{ip} - - [25/Oct/2026:10:00:00 +0300] "GET / HTTP/1.1" {status} 100 "-" "ua" {rt}"#
-        );
-        parse_line(&line).unwrap()
+        let mut r = ParseResult::default();
+        r.push_line(&line(ip, status, rt));
+        r.entries.remove(0)
     }
 
     #[test]
@@ -186,7 +194,10 @@ mod tests {
 
     #[test]
     fn hourly_and_top() {
-        let data = vec![entry("1.1.1.1", 200, 0.1), entry("1.1.1.1", 500, 0.3)];
+        let mut r = ParseResult::default();
+        r.push_line(&line("1.1.1.1", 200, 0.1));
+        r.push_line(&line("1.1.1.1", 500, 0.3));
+        let data = &r.entries;
 
         let h = hourly(data.iter());
         assert_eq!(
@@ -198,7 +209,7 @@ mod tests {
         );
         assert_eq!(h[9].total, 0);
 
-        let top = top_endpoints(data.iter(), 5);
+        let top = top_endpoints(data.iter(), &r.paths, 5);
 
         assert_eq!(top.len(), 1);
         assert_eq!(top[0].path, "/");

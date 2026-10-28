@@ -6,7 +6,7 @@ use crate::components::{
     upload::FileDrop,
 };
 use crate::filter::Filters;
-use crate::parser::{LogEntry, ParseResult};
+use crate::parser::{LogEntry, ParseResult, PathTable};
 use crate::perf;
 use crate::stats::{hourly, summarize, top_endpoints};
 use gloo_timers::future::TimeoutFuture;
@@ -19,6 +19,8 @@ pub struct Dataset {
     pub id: u32,
     pub name: String,
     pub entries: Vec<LogEntry>,
+    /// Distinct request paths; entries refer to them by `path_id`.
+    pub paths: PathTable,
     pub failed: usize,
     pub parse_ms: f64,
 }
@@ -68,6 +70,7 @@ pub fn App() -> impl IntoView {
                 id: load_count.get_value(),
                 name,
                 entries: result.entries,
+                paths: result.paths,
                 failed: result.failed,
                 parse_ms: now_ms() - start,
             }));
@@ -81,13 +84,15 @@ pub fn App() -> impl IntoView {
     let filtered = Memo::new(move |_| {
         let criteria = filters.criteria();
         dataset.with(|d| match d {
-            Some(d) => d
-                .entries
-                .iter()
-                .enumerate()
-                .filter(|(_, e)| criteria.matches(e))
-                .map(|(i, _)| i)
-                .collect::<Vec<usize>>(),
+            Some(d) => {
+                let matcher = criteria.matcher(&d.paths);
+                d.entries
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, e)| matcher.matches(e))
+                    .map(|(i, _)| i)
+                    .collect::<Vec<usize>>()
+            }
             None => Vec::new(),
         })
     });
@@ -108,7 +113,7 @@ pub fn App() -> impl IntoView {
 
     let endpoints = Memo::new(move |_| {
         dataset.with(|d| match d {
-            Some(d) => filtered.with(|idx| top_endpoints(idx.iter().map(|&i| &d.entries[i]), 8)),
+            Some(d) => filtered.with(|idx| top_endpoints(idx.iter().map(|&i| &d.entries[i]), &d.paths, 8)),
             None => Vec::new(),
         })
     });

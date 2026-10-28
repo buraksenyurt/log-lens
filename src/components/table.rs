@@ -19,6 +19,8 @@ enum SortKey {
 struct Row {
     key: (u32, usize),
     entry: LogEntry,
+    /// Resolved from the dataset's PathTable (entries only keep a path_id).
+    path: String,
 }
 
 fn status_class(status: u16) -> &'static str {
@@ -85,6 +87,7 @@ pub fn RequestTable(
                     .map(|&i| Row {
                         key: (d.id, i),
                         entry: d.entries[i].clone(),
+                        path: d.paths.path(d.entries[i].path_id).to_string(),
                     })
                     .collect::<Vec<_>>()
             })
@@ -140,13 +143,13 @@ pub fn RequestTable(
                         key=|row| row.key
                         children=move |row| {
                             let e = row.entry;
-                            let title = e.path.clone();
+                            let title = row.path.clone();
                             view! {
                                 <tr>
                                     <td class="mono">{e.timestamp}</td>
                                     <td class="mono">{e.ip}</td>
                                     <td>{e.method}</td>
-                                    <td class="path" title=title>{e.path}</td>
+                                    <td class="path" title=title>{row.path}</td>
                                     <td class=format!("num {}", status_class(e.status))>{e.status}</td>
                                     <td class="num">{human_bytes(e.bytes)}</td>
                                     <td class="num">

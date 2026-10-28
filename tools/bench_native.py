@@ -27,6 +27,7 @@ SIZES = [10_000, 100_000, 500_000]
 OPS = [
     ("parse", "Ayrıştırma (parse_all)"),
     ("filter", "Filtreleme (5xx + checkout)"),
+    ("filter_path", "Path araması (checkout)"),
     ("summarize", "Özet istatistik (summarize)"),
     ("hourly", "Saatlik dağılım (hourly)"),
     ("top_endpoints", "Top endpoint'ler (top_endpoints)"),
