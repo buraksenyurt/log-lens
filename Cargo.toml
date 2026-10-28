@@ -20,6 +20,13 @@ web-sys = { version = "0.3.106", features = [
     "Performance",
 ] }
 
+[dev-dependencies]
+criterion = { version = "0.8", features = ["html_reports"] }
+
+[[bench]]
+name = "native"
+harness = false
+
 [profile.release]
 lto = true # Link Time Optimization, discard unused code between crates
 codegen-units = 1 # Reduce codegen units for better optimization

@@ -101,7 +101,7 @@ impl ParseResult {
     }
 }
 
-#[cfg(test)]
+/// Parses a whole text at once (used by tests and native benchmarks).
 pub fn parse_all(text: &str) -> ParseResult {
     let mut result = ParseResult::default();
     for line in text.lines() {
