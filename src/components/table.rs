@@ -19,7 +19,10 @@ enum SortKey {
 struct Row {
     key: (u32, usize),
     entry: LogEntry,
-    /// Resolved from the dataset's PathTable (entries only keep a path_id).
+    // Text fields resolved from the dataset's tables (entries only keep ids).
+    timestamp: String,
+    ip: String,
+    method: String,
     path: String,
 }
 
@@ -84,10 +87,17 @@ pub fn RequestTable(
                 s.iter()
                     .skip(start)
                     .take(PAGE_SIZE)
-                    .map(|&i| Row {
-                        key: (d.id, i),
-                        entry: d.entries[i].clone(),
-                        path: d.paths.path(d.entries[i].path_id).to_string(),
+                    .map(|&i| {
+                        let e = &d.entries[i];
+                        let t = &d.tables;
+                        Row {
+                            key: (d.id, i),
+                            entry: e.clone(),
+                            timestamp: t.timestamp(e),
+                            ip: t.ip(e).to_string(),
+                            method: t.method(e).to_string(),
+                            path: t.path(e).to_string(),
+                        }
                     })
                     .collect::<Vec<_>>()
             })
@@ -146,9 +156,9 @@ pub fn RequestTable(
                             let title = row.path.clone();
                             view! {
                                 <tr>
-                                    <td class="mono">{e.timestamp}</td>
-                                    <td class="mono">{e.ip}</td>
-                                    <td>{e.method}</td>
+                                    <td class="mono">{row.timestamp}</td>
+                                    <td class="mono">{row.ip}</td>
+                                    <td>{row.method}</td>
                                     <td class="path" title=title>{row.path}</td>
                                     <td class=format!("num {}", status_class(e.status))>{e.status}</td>
                                     <td class="num">{human_bytes(e.bytes)}</td>

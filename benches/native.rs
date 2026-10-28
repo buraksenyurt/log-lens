@@ -14,7 +14,7 @@ use std::path::PathBuf;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use log_lens::filter::Criteria;
-use log_lens::parser::{LogEntry, PathTable, parse_all};
+use log_lens::parser::{LogEntry, Tables, parse_all};
 use log_lens::stats::{hourly, summarize, top_endpoints};
 
 /// Number of log lines per input file.
@@ -38,8 +38,8 @@ fn load(lines: usize) -> String {
 }
 
 /// Same logic as the `filtered` Memo in app.rs: indices of matching entries.
-fn filter_indices(entries: &[LogEntry], paths: &PathTable, criteria: &Criteria) -> Vec<usize> {
-    let matcher = criteria.matcher(paths);
+fn filter_indices(entries: &[LogEntry], tables: &Tables, criteria: &Criteria) -> Vec<usize> {
+    let matcher = criteria.matcher(tables);
     entries
         .iter()
         .enumerate()
@@ -66,7 +66,7 @@ fn benches(c: &mut Criterion) {
     for &lines in &SIZES {
         let text = load(lines);
         let parsed = parse_all(&text);
-        let (entries, paths) = (&parsed.entries, &parsed.paths);
+        let (entries, tables) = (&parsed.entries, &parsed.tables);
         assert_eq!(entries.len(), lines, "unexpected number of parsed lines");
 
         let mut group = c.benchmark_group(format!("{lines}"));
@@ -78,10 +78,10 @@ fn benches(c: &mut Criterion) {
             b.iter(|| parse_all(black_box(t)))
         });
         group.bench_with_input(BenchmarkId::from_parameter("filter"), entries, |b, e| {
-            b.iter(|| filter_indices(black_box(e), paths, black_box(&criteria)))
+            b.iter(|| filter_indices(black_box(e), tables, black_box(&criteria)))
         });
         group.bench_with_input(BenchmarkId::from_parameter("filter_path"), entries, |b, e| {
-            b.iter(|| filter_indices(black_box(e), paths, black_box(&path_only)))
+            b.iter(|| filter_indices(black_box(e), tables, black_box(&path_only)))
         });
         group.bench_with_input(BenchmarkId::from_parameter("summarize"), entries, |b, e| {
             b.iter(|| summarize(black_box(e).iter()))
@@ -90,7 +90,7 @@ fn benches(c: &mut Criterion) {
             b.iter(|| hourly(black_box(e).iter()))
         });
         group.bench_with_input(BenchmarkId::from_parameter("top_endpoints"), entries, |b, e| {
-            b.iter(|| top_endpoints(black_box(e).iter(), paths, 8))
+            b.iter(|| top_endpoints(black_box(e).iter(), &tables.paths, 8))
         });
         group.finish();
     }

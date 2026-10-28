@@ -121,6 +121,10 @@ Her adım ayrı bir commit; değerler 500.000 satırlık sütundan (medyan). Nat
 | | | İlk çizim (Memo'lar + DOM + boyama) | 74.9 ms | 53.2 ms (−%29) |
 | | | Ayrıştırma (native) | 282.08 ms | 285.39 ms (≈ aynı) |
 | | | Dosya seçimi → panel ekranda | 544 ms | 573 ms (+%5)¹ |
+| 4 | Tüm metin alanlarını numaralandırma: IP, method, user agent, tarih ve saat dilimi de `Tables` içinde bir kez saklanır, kayıt tamamen sayılardan oluşur (heap ayırması yok, ~56 byte) | Ayrıştırma (native) | 285.39 ms | _ölçülecek_ |
+| | | `summarize` (native) | 14.54 ms | _ölçülecek_ |
+| | | Ayrıştırma (Firefox) | 323 ms | _ölçülecek_ |
+| | | Dosya seçimi → panel ekranda | 573 ms | _ölçülecek_ |
 
 ¹ İlk ölçümde 612 ms çıkmıştı; kodu değişmeyen adımlar da yavaşladığı için ölçüm tekrarlandı (tablodaki değerler tekrardan). Kalan farkın çoğu kodu değişmeyen dosya okumasından geliyor (149 → 177 ms); bu adım tur tura ±%15 oynuyor.
 

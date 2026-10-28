@@ -1,5 +1,5 @@
 //! Filtering criteria and matching logic.
-use crate::parser::{LogEntry, PathTable};
+use crate::parser::{LogEntry, Tables};
 use leptos::prelude::*;
 
 /// Raw fitering criteria that can be applied to log entries.
@@ -17,7 +17,8 @@ pub struct Criteria {
 impl Criteria {
     /// Prepares the criteria for one dataset. The path condition is evaluated
     /// once per distinct path here, instead of once per entry in `matches`.
-    pub fn matcher(&self, paths: &PathTable) -> Matcher<'_> {
+    pub fn matcher(&self, tables: &Tables) -> Matcher<'_> {
+        let paths = &tables.paths;
         let needs_mask = !self.path_contains.is_empty() || self.endpoint.is_some();
         let path_ok = needs_mask.then(|| {
             paths
@@ -32,9 +33,16 @@ impl Criteria {
                 })
                 .collect()
         });
+        // Methods are interned too: compare ids instead of strings. A method that
+        // does not occur in the file can never match (u32::MAX is never an id).
+        let method_id = self
+            .method
+            .as_deref()
+            .map(|m| tables.methods.id_of(m).unwrap_or(u32::MAX));
         Matcher {
             criteria: self,
             path_ok,
+            method_id,
         }
     }
 }
@@ -44,6 +52,7 @@ pub struct Matcher<'a> {
     criteria: &'a Criteria,
     /// path_ok[path_id]: does that path pass the text search and the endpoint filter?
     path_ok: Option<Vec<bool>>,
+    method_id: Option<u32>,
 }
 
 impl Matcher<'_> {
@@ -61,8 +70,8 @@ impl Matcher<'_> {
             }
         }
 
-        if let Some(m) = &c.method {
-            if &e.method != m {
+        if let Some(m) = self.method_id {
+            if e.method_id != m {
                 return false;
             }
         }
@@ -144,7 +153,7 @@ mod tests {
     #[test]
     fn empty_criteria_matches_all() {
         let r = parse(&[("GET", "/", 200, 0.1)]);
-        assert!(Criteria::default().matcher(&r.paths).matches(&r.entries[0]));
+        assert!(Criteria::default().matcher(&r.tables).matches(&r.entries[0]));
     }
 
     #[test]
@@ -164,7 +173,7 @@ mod tests {
             ("POST", "/api/cart", 502, 0.9),
             ("POST", "/api/checkout", 502, 0.1),
         ]);
-        let m = c.matcher(&r.paths);
+        let m = c.matcher(&r.tables);
         let results: Vec<bool> = r.entries.iter().map(|e| m.matches(e)).collect();
         assert_eq!(results, vec![true, false, false, false, false]);
     }
@@ -182,7 +191,7 @@ mod tests {
                 endpoint: Some(endpoint.into()),
                 ..Default::default()
             };
-            let m = c.matcher(&r.paths);
+            let m = c.matcher(&r.tables);
             r.entries.iter().map(|e| m.matches(e)).collect::<Vec<_>>()
         };
         // "/" must not match every path (a substring search would).

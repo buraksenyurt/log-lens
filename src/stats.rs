@@ -37,7 +37,7 @@ pub fn summarize<'a>(entries: impl Iterator<Item = &'a LogEntry>) -> Summary {
             500..=599 => s.server_errors += 1,
             _ => {}
         }
-        ips.insert(e.ip.as_str());
+        ips.insert(e.ip_id);
         if let Some(t) = e.request_time {
             times.push(t * 1000.0);
         }
@@ -142,20 +142,23 @@ mod tests {
         format!(r#"{ip} - - [25/Oct/2026:10:00:00 +0300] "GET / HTTP/1.1" {status} 100 "-" "ua" {rt}"#)
     }
 
-    fn entry(ip: &str, status: u16, rt: f64) -> LogEntry {
+    /// Parses all rows into one ParseResult, so equal strings share an id.
+    fn entries(rows: &[(&str, u16, f64)]) -> Vec<LogEntry> {
         let mut r = ParseResult::default();
-        r.push_line(&line(ip, status, rt));
-        r.entries.remove(0)
+        for (ip, status, rt) in rows {
+            r.push_line(&line(ip, *status, *rt));
+        }
+        r.entries
     }
 
     #[test]
     fn summary_counts() {
-        let data = vec![
-            entry("1.1.1.1", 200, 0.1),
-            entry("1.1.1.1", 404, 0.2),
-            entry("2.2.2.2", 500, 0.3),
-            entry("3.3.3.3", 200, 0.4),
-        ];
+        let data = entries(&[
+            ("1.1.1.1", 200, 0.1),
+            ("1.1.1.1", 404, 0.2),
+            ("2.2.2.2", 500, 0.3),
+            ("3.3.3.3", 200, 0.4),
+        ]);
         let s = summarize(data.iter());
         assert_eq!(s.total, 4);
         assert_eq!(s.client_errors, 1);
@@ -171,9 +174,10 @@ mod tests {
     fn p95_on_unsorted_input() {
         // 1..=100 ms in a scrambled order: the 95th percentile must be 95 ms,
         // exactly what a full sort would give.
-        let data: Vec<LogEntry> = (0..100)
-            .map(|i| entry("1.1.1.1", 200, ((i * 37) % 100 + 1) as f64 / 1000.0))
+        let rows: Vec<(&str, u16, f64)> = (0..100)
+            .map(|i| ("1.1.1.1", 200, ((i * 37) % 100 + 1) as f64 / 1000.0))
             .collect();
+        let data = entries(&rows);
         let s = summarize(data.iter());
         assert!((s.p95_ms.unwrap() - 95.0).abs() < 1e-9);
     }
@@ -209,7 +213,7 @@ mod tests {
         );
         assert_eq!(h[9].total, 0);
 
-        let top = top_endpoints(data.iter(), &r.paths, 5);
+        let top = top_endpoints(data.iter(), &r.tables.paths, 5);
 
         assert_eq!(top.len(), 1);
         assert_eq!(top[0].path, "/");
