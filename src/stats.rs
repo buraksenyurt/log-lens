@@ -136,19 +136,16 @@ pub fn top_endpoints<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::ParseResult;
+    use crate::parser::parse_all;
 
     fn line(ip: &str, status: u16, rt: f64) -> String {
         format!(r#"{ip} - - [25/Oct/2026:10:00:00 +0300] "GET / HTTP/1.1" {status} 100 "-" "ua" {rt}"#)
     }
 
-    /// Parses all rows into one ParseResult, so equal strings share an id.
+    /// Parses all rows as one text, so equal strings share an id.
     fn entries(rows: &[(&str, u16, f64)]) -> Vec<LogEntry> {
-        let mut r = ParseResult::default();
-        for (ip, status, rt) in rows {
-            r.push_line(&line(ip, *status, *rt));
-        }
-        r.entries
+        let text: String = rows.iter().map(|(ip, s, rt)| line(ip, *s, *rt) + "\n").collect();
+        parse_all(&text).entries
     }
 
     #[test]
@@ -198,9 +195,8 @@ mod tests {
 
     #[test]
     fn hourly_and_top() {
-        let mut r = ParseResult::default();
-        r.push_line(&line("1.1.1.1", 200, 0.1));
-        r.push_line(&line("1.1.1.1", 500, 0.3));
+        let text = format!("{}\n{}\n", line("1.1.1.1", 200, 0.1), line("1.1.1.1", 500, 0.3));
+        let r = parse_all(&text);
         let data = &r.entries;
 
         let h = hourly(data.iter());

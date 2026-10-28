@@ -18,8 +18,11 @@ use leptos::task::spawn_local;
 pub struct Dataset {
     pub id: u32,
     pub name: String,
+    /// The file content. Entries point into it; the table reads the visible
+    /// rows' text from here instead of every entry keeping its own copies.
+    pub text: String,
     pub entries: Vec<LogEntry>,
-    /// Interned strings (IPs, methods, paths, ...); entries refer to them by id.
+    /// Interned IPs, methods and paths; entries refer to them by id.
     pub tables: Tables,
     pub failed: usize,
     pub parse_ms: f64,
@@ -54,7 +57,7 @@ pub fn App() -> impl IntoView {
                 let mut count = 0;
                 for line in lines.by_ref().take(CHUNK_LINES) {
                     consumed += line.len() + 1;
-                    result.push_line(line);
+                    result.push_line(&text, line);
                     count += 1;
                 }
                 if count < CHUNK_LINES {
@@ -69,6 +72,7 @@ pub fn App() -> impl IntoView {
             dataset.set(Some(Dataset {
                 id: load_count.get_value(),
                 name,
+                text,
                 entries: result.entries,
                 tables: result.tables,
                 failed: result.failed,

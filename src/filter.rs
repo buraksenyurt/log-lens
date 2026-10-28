@@ -137,17 +137,19 @@ impl Filters {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::ParseResult;
+    use crate::parser::{ParseResult, parse_all};
 
     /// Parses one line per (method, path, status, request time) tuple.
     fn parse(rows: &[(&str, &str, u16, f64)]) -> ParseResult {
-        let mut r = ParseResult::default();
-        for (method, path, status, rt) in rows {
-            r.push_line(&format!(
-                r#"1.1.1.1 - - [25/Oct/2026:10:00:00 +0300] "{method} {path} HTTP/1.1" {status} 1 "-" "ua" {rt}"#
-            ));
-        }
-        r
+        let text: String = rows
+            .iter()
+            .map(|(method, path, status, rt)| {
+                format!(
+                    "1.1.1.1 - - [25/Oct/2026:10:00:00 +0300] \"{method} {path} HTTP/1.1\" {status} 1 \"-\" \"ua\" {rt}\n"
+                )
+            })
+            .collect();
+        parse_all(&text)
     }
 
     #[test]

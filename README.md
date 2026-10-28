@@ -139,10 +139,15 @@ Her adım ayrı bir commit; değerler 500.000 satırlık sütundan (medyan). Nat
 | | | `summarize` (native) | 14.54 ms | 6.53 ms (−%55) |
 | | | Ayrıştırma (Firefox) | 323 ms | 383 ms (+%19)² |
 | | | Dosya seçimi → panel ekranda | 573 ms | 660 ms (+%15)² |
+| 5 | Sadece gösterilen alanları kopyalamamak: zaman damgası ve user agent kayıtta tutulmaz, ekrandaki satırlar dosya metninden yeniden okunur; hash araması satır başına 6'dan 2'ye iner, küçük tablolarda düz tarama | Ayrıştırma (Firefox, A/B: 3. adıma karşı) | 335 ms | 344 ms (fark yok, 5/10 tur)³ |
+| | | Dosya seçimi → panel ekranda (A/B: 3. adıma karşı) | 582 ms | 589 ms (fark yok, 3/10 tur)³ |
+| | | Ayrıştırma (native) | 243.59 ms | _ölçülecek_ |
 
 ¹ İlk ölçümde 612 ms çıkmıştı; kodu değişmeyen adımlar da yavaşladığı için ölçüm tekrarlandı (tablodaki değerler tekrardan). Kalan farkın çoğu kodu değişmeyen dosya okumasından geliyor (149 → 177 ms); bu adım tur tura ±%15 oynuyor.
 
 ² A/B ölçümüyle doğrulandı (`npm run bench:ab -- 34e3d75 421b7e4`, 10 tur): Firefox'ta ayrıştırma +%16 yavaş (B yalnızca 1/10 turda hızlı), ilk çizim −%17 hızlı (10/10 tur). Kayıt başına 6 hash araması, Firefox'un WASM motorunda 4 `String` ayırmaktan pahalıya geldi; native ve V8'de ise kazançlıydı.
+
+³ `npm run bench:ab -- 34e3d75 .` ile, aynı Firefox oturumunda dönüşümlü 10 tur. 4. adımdaki Firefox yavaşlaması ortadan kalktı; native ve V8'deki kazançlar korunuyor. Bedeli: dosya metni yükleme sonrasında bellekte kalır (500k satırda ~70 MB).
 
 ## Örnek Çalışma Zamanı Görüntüleri
 

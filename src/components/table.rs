@@ -1,5 +1,5 @@
 use crate::app::Dataset;
-use crate::parser::LogEntry;
+use crate::parser::{LogEntry, raw_entry};
 use crate::stats::human_bytes;
 use leptos::prelude::*;
 const PAGE_SIZE: usize = 50;
@@ -19,7 +19,7 @@ enum SortKey {
 struct Row {
     key: (u32, usize),
     entry: LogEntry,
-    // Text fields resolved from the dataset's tables (entries only keep ids).
+    // Text fields read back from the file text (entries do not store them).
     timestamp: String,
     ip: String,
     method: String,
@@ -89,14 +89,15 @@ pub fn RequestTable(
                     .take(PAGE_SIZE)
                     .map(|&i| {
                         let e = &d.entries[i];
-                        let t = &d.tables;
+                        // Only the visible rows are read back from the file text.
+                        let raw = raw_entry(&d.text, e);
                         Row {
                             key: (d.id, i),
                             entry: e.clone(),
-                            timestamp: t.timestamp(e),
-                            ip: t.ip(e).to_string(),
-                            method: t.method(e).to_string(),
-                            path: t.path(e).to_string(),
+                            timestamp: raw.timestamp.to_string(),
+                            ip: raw.ip.to_string(),
+                            method: raw.method.to_string(),
+                            path: raw.path.to_string(),
                         }
                     })
                     .collect::<Vec<_>>()

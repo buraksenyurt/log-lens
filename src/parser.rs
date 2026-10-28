@@ -4,23 +4,23 @@
 //! 192.168.1.10 - - [25/Oct/2026:13:55:36 +0300] "GET /api/products HTTP/1.1" 200 1534 "-" "Mozilla/5.0" 0.123
 use rustc_hash::FxHashMap;
 
-/// A parsed log entry. Text fields are not stored per entry: logs repeat the
-/// same IPs, methods, paths, user agents and dates over and over, so entries
-/// only keep small ids into the file's [`Tables`]. The entry stays small
-/// (no heap allocation), which also makes scanning 500k entries cache friendly.
+/// A parsed log entry: only what the statistics and filters need.
+///
+/// Fields that are only displayed (timestamp, user agent, ...) are not copied:
+/// the entry keeps the byte offset of its line in the source text, and the
+/// table re-parses the few visible lines with [`raw_entry`]. Values that are
+/// computed on (IP, method, path) are interned in [`Tables`]. The entry is small
+/// and allocation-free.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LogEntry {
+    /// Byte offset of the line in the source text.
+    pub offset: u32,
     pub ip_id: u32,
-    pub date_id: u32,
-    pub zone_id: u32,
-    /// Time of day in seconds (0..86400).
-    pub seconds: u32,
-    pub hour: u8,
     pub method_id: u32,
     pub path_id: u32,
     pub status: u16,
+    pub hour: u8,
     pub bytes: u64,
-    pub agent_id: u32,
     pub request_time: Option<f64>,
 }
 
@@ -44,6 +44,9 @@ pub struct RawEntry<'a> {
     pub request_time: Option<f64>,
 }
 
+/// Up to this many values an [`Interner`] is searched linearly instead of hashed.
+const SMALL_TABLE: usize = 8;
+
 /// Stores each distinct string once and hands out stable `u32` ids.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Interner {
@@ -55,7 +58,12 @@ impl Interner {
     /// Returns the id of `value`, adding it on first sight. Looking up an
     /// existing value does not allocate.
     pub fn intern(&mut self, value: &str) -> u32 {
-        if let Some(&id) = self.ids.get(value) {
+        // Tiny tables (HTTP methods, ...): a linear scan is cheaper than hashing.
+        if self.values.len() <= SMALL_TABLE {
+            if let Some(id) = self.values.iter().position(|v| v == value) {
+                return id as u32;
+            }
+        } else if let Some(&id) = self.ids.get(value) {
             return id;
         }
         let id = self.values.len() as u32;
@@ -143,45 +151,21 @@ impl PathTable {
     }
 }
 
-/// All interned strings of one file. Entries refer to them by id.
+/// Interned values of one file that the statistics and filters work on.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Tables {
     pub paths: PathTable,
     pub ips: Interner,
     pub methods: Interner,
-    pub agents: Interner,
-    pub dates: Interner,
-    pub zones: Interner,
 }
 
-impl Tables {
-    pub fn ip(&self, e: &LogEntry) -> &str {
-        self.ips.get(e.ip_id)
-    }
-
-    pub fn method(&self, e: &LogEntry) -> &str {
-        self.methods.get(e.method_id)
-    }
-
-    pub fn path(&self, e: &LogEntry) -> &str {
-        self.paths.path(e.path_id)
-    }
-
-    pub fn user_agent(&self, e: &LogEntry) -> &str {
-        self.agents.get(e.agent_id)
-    }
-
-    /// Rebuilds the original nginx timestamp, e.g. `25/Oct/2026:13:55:36 +0300`.
-    pub fn timestamp(&self, e: &LogEntry) -> String {
-        let (h, m, s) = (e.seconds / 3600, e.seconds / 60 % 60, e.seconds % 60);
-        let zone = self.zones.get(e.zone_id);
-        let date = self.dates.get(e.date_id);
-        if zone.is_empty() {
-            format!("{date}:{h:02}:{m:02}:{s:02}")
-        } else {
-            format!("{date}:{h:02}:{m:02}:{s:02} {zone}")
-        }
-    }
+/// Re-parses the line of `entry` from the text it was parsed from, giving
+/// access to every field (timestamp, user agent, ...). Meant for the handful of
+/// rows on screen, not for scanning all entries.
+pub fn raw_entry<'a>(text: &'a str, entry: &LogEntry) -> RawEntry<'a> {
+    let rest = &text[entry.offset as usize..];
+    let line = rest.split_once('\n').map_or(rest, |(line, _)| line);
+    parse_line(line).expect("entry offsets always point at a line that parsed before")
 }
 
 /// Splits `25/Oct/2026:13:55:36 +0300` into (`25/Oct/2026`, seconds of day, `+0300`).
@@ -273,24 +257,25 @@ pub struct ParseResult {
 }
 
 impl ParseResult {
-    pub fn push_line(&mut self, line: &str) {
+    /// Parses `line`, which must be a slice of `text` (e.g. from `text.lines()`);
+    /// its position in `text` is stored so the line can be read back later.
+    pub fn push_line(&mut self, text: &str, line: &str) {
         if line.trim().is_empty() {
             return;
         }
+        let offset = line.as_ptr() as usize - text.as_ptr() as usize;
+        debug_assert!(offset + line.len() <= text.len(), "line is not a slice of text");
         match parse_line(line) {
             Ok(raw) => {
                 let t = &mut self.tables;
                 self.entries.push(LogEntry {
+                    offset: offset as u32,
                     ip_id: t.ips.intern(raw.ip),
-                    date_id: t.dates.intern(raw.date),
-                    zone_id: t.zones.intern(raw.zone),
-                    seconds: raw.seconds,
-                    hour: raw.hour,
                     method_id: t.methods.intern(raw.method),
                     path_id: t.paths.intern(raw.path),
                     status: raw.status,
+                    hour: raw.hour,
                     bytes: raw.bytes,
-                    agent_id: t.agents.intern(raw.user_agent),
                     request_time: raw.request_time,
                 });
             }
@@ -303,7 +288,7 @@ impl ParseResult {
 pub fn parse_all(text: &str) -> ParseResult {
     let mut result = ParseResult::default();
     for line in text.lines() {
-        result.push_line(line);
+        result.push_line(text, line);
     }
     result
 }
@@ -374,16 +359,35 @@ mod tests {
     }
 
     #[test]
-    fn entries_round_trip_through_tables() {
-        let r = parse_all(&format!("{SAMPLE}\n{SAMPLE}\n"));
-        let (t, e) = (&r.tables, &r.entries[1]);
-        assert_eq!(t.ip(e), "192.168.1.10");
-        assert_eq!(t.method(e), "GET");
-        assert_eq!(t.path(e), "/api/products?id=3");
-        assert_eq!(t.user_agent(e), "Mozilla/5.0 (X11; Linux x86_64)");
-        assert_eq!(t.timestamp(e), "25/Oct/2026:13:55:36 +0300");
-        // The same strings are stored once.
-        assert_eq!((t.ips.len(), t.agents.len(), t.dates.len()), (1, 1, 1));
+    fn display_fields_are_read_back_from_the_text() {
+        let other = SAMPLE.replace("192.168.1.10", "10.0.0.1").replace("GET", "POST");
+        let text = format!("{SAMPLE}\r\n\n{other}\n{SAMPLE}");
+        let r = parse_all(&text);
+        assert_eq!(r.entries.len(), 3);
+
+        let raw = raw_entry(&text, &r.entries[1]);
+        assert_eq!(raw.ip, "10.0.0.1");
+        assert_eq!(raw.method, "POST");
+        assert_eq!(raw.timestamp, "25/Oct/2026:13:55:36 +0300");
+        assert_eq!(raw.user_agent, "Mozilla/5.0 (X11; Linux x86_64)");
+        // CRLF line endings and the last line without a newline work too.
+        assert_eq!(raw_entry(&text, &r.entries[0]).ip, "192.168.1.10");
+        assert_eq!(raw_entry(&text, &r.entries[2]).method, "GET");
+        // Equal values share one id.
+        let t = &r.tables;
+        assert_eq!((t.ips.len(), t.methods.len(), t.paths.len()), (2, 2, 1));
+        assert_eq!(r.entries[0].ip_id, r.entries[2].ip_id);
+    }
+
+    #[test]
+    fn small_and_large_interners_agree() {
+        let mut i = Interner::default();
+        let words: Vec<String> = (0..50).map(|n| format!("w{n}")).collect();
+        let ids: Vec<u32> = words.iter().map(|w| i.intern(w)).collect();
+        // Interning again (now past the linear-scan size) returns the same ids.
+        assert_eq!(words.iter().map(|w| i.intern(w)).collect::<Vec<_>>(), ids);
+        assert_eq!(i.id_of("w3"), Some(3));
+        assert_eq!(i.get(42), "w42");
     }
 
     #[test]
