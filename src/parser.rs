@@ -307,11 +307,16 @@ impl ParseResult {
     /// Parses `line`, which must be a slice of `text` (e.g. from `text.lines()`);
     /// its position in `text` is stored so the line can be read back later.
     pub fn push_line(&mut self, text: &str, line: &str) {
+        let offset = line.as_ptr() as usize - text.as_ptr() as usize;
+        debug_assert!(offset + line.len() <= text.len(), "line is not a slice of text");
+        self.push_line_at(offset, line);
+    }
+
+    /// Like [`push_line`](Self::push_line), with the line's byte offset given directly.
+    pub fn push_line_at(&mut self, offset: usize, line: &str) {
         if line.trim().is_empty() {
             return;
         }
-        let offset = line.as_ptr() as usize - text.as_ptr() as usize;
-        debug_assert!(offset + line.len() <= text.len(), "line is not a slice of text");
         match parse_line(line) {
             Ok(raw) => {
                 let t = &mut self.tables;

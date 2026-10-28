@@ -7,6 +7,7 @@
 pub mod app;
 pub mod components;
 pub mod filter;
+pub mod loader;
 pub mod parser;
 pub mod perf;
 pub mod stats;

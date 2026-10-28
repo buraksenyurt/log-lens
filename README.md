@@ -57,7 +57,7 @@ python tools/bench_native.py --skip-bench  # sadece son sonuçlardan tabloyu yen
 
 ### Tarayıcı ölçümleri (Firefox, uçtan uca)
 
-Uygulamanın release build'i [Playwright](https://playwright.dev) ile headless Firefox'ta açılır, aynı `samples/bench_*.log` dosyaları yüklenir ve kullanıcının gördüğü süreler ölçülür. Uygulama; dosya okuma (`File.arrayBuffer()`), JS'ten WASM'a byte kopyası ve ayrıştırma adımlarını `performance.measure` ile (`loglens:read`, `loglens:copy`, `loglens:parse`) işaretler; bu ölçümler Firefox profiler'ında da görünür.
+Uygulamanın release build'i [Playwright](https://playwright.dev) ile headless Firefox'ta açılır, aynı `samples/bench_*.log` dosyaları yüklenir ve kullanıcının gördüğü süreler ölçülür. Uygulama dosyayı parça parça okur ve her parçayı, tarayıcı bir sonrakini okurken ayrıştırır. Ölçüm noktaları `performance.measure` / `mark` ile işaretlenir ve Firefox profiler'ında da görünür: `loglens:read` (son parça gelene kadar), `loglens:copy` ve `loglens:parse` (parçaların toplamı; okuma ile üst üste bindikleri için toplamları "kayıtlar hazır" süresini aşabilir) ve kayıtların hazır olduğu an `loglens:ready`.
 
 İlk kurulum (bir kez):
 
@@ -146,6 +146,9 @@ Her adım ayrı bir commit; değerler 500.000 satırlık sütundan (medyan). Nat
 | 6 | Byte düzeyinde, tek geçişli ayrıştırıcı: `split_*` yineleyicileri ve standart sayı ayrıştırıcıları yerine `memchr` ile ayraç arama ve elle sayı çevirme; eski ayrıştırıcı testlerde referans olarak tutulur, sonuçlar birebir aynı | Ayrıştırma (Firefox, A/B: 5. adıma karşı) | 292 ms | **263 ms (−%10, 10/10 tur)**⁴ |
 | | | Dosya seçimi → panel ekranda (A/B) | 505 ms | 481 ms (−%5, 8/10 tur)⁴ |
 | | | Ayrıştırma (native, 5. ve 6. adım birlikte) | 243.59 ms | **117.40 ms (−%52)**⁵ |
+| 7 | Okuma ile ayrıştırmayı üst üste bindirmek: dosya 1 MB'tan 16 MB'a büyüyen dilimlerle okunur, bir dilim ayrıştırılırken sonraki okunur; dosya için tek bellek alanı, UTF-8 kontrolü dilim dilim | Dosya seçimi → kayıtlar hazır (A/B: 6. adıma karşı) | 452 ms | 427 ms (−%5.5, 8/10 tur)⁶ |
+| | | Ayrıştırma, CPU (A/B) | 259 ms | 240 ms (−%7.5, 9/10 tur)⁶ |
+| | | Dosya seçimi → panel ekranda (A/B) | 490 ms | **464 ms (−%5.4, 8/10 tur)**⁶ |
 
 ¹ İlk ölçümde 612 ms çıkmıştı; kodu değişmeyen adımlar da yavaşladığı için ölçüm tekrarlandı (tablodaki değerler tekrardan). Kalan farkın çoğu kodu değişmeyen dosya okumasından geliyor (149 → 177 ms); bu adım tur tura ±%15 oynuyor.
 
@@ -156,6 +159,8 @@ Her adım ayrı bir commit; değerler 500.000 satırlık sütundan (medyan). Nat
 ⁴ `npm run bench:ab -- HEAD .` ile, aynı Firefox oturumunda dönüşümlü 10 tur.
 
 ⁵ Native ayrıştırıcı WASM'dan daha çok hızlandı (WASM / native oranı ~1.2×'den ~2.2×'e çıktı): `memchr` native'de SIMD (x86_64'te AVX2/SSE2) kullanırken WASM build'i SIMD'siz derleniyor. WASM SIMD (`simd128`) denendi, V8'de ölçülebilir fark görülmedi.
+
+⁶ `npm run bench:ab -- HEAD .` ile (düzeltilmiş araçla), dönüşümlü 10 tur. Firefox'ta okuma ile ayrıştırma beklenenden az üst üste biniyor; kazancın çoğu daha küçük parçalarla çalışmaktan (kopya −%21, ayrıştırma −%7.5) geliyor. Ek fayda: tüm dosya için ayrı bir 70 MB'lık `ArrayBuffer` artık oluşturulmuyor, en büyük JS tamponu 16 MB.
 
 ## Örnek Çalışma Zamanı Görüntüleri
 

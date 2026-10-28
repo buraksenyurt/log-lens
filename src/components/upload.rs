@@ -1,44 +1,14 @@
 use leptos::prelude::*;
-use leptos::task::spawn_local;
 use wasm_bindgen::JsCast;
-use wasm_bindgen_futures::JsFuture;
 use web_sys::{DragEvent, File, HtmlInputElement};
 
-use crate::perf;
-
 /// Select file and drag-and-drop area.
-/// When the file is read, the `on_load` callback is called with (file name, content).
+/// The selected file is handed to `on_file`; reading it is up to the caller
+/// (see `loader::load_file`, which parses the file while it streams in).
 #[component]
-pub fn FileDrop(on_load: Callback<(String, String)>) -> impl IntoView {
+pub fn FileDrop(on_file: Callback<File>) -> impl IntoView {
     let (dragging, set_dragging) = signal(false);
-    let (error, set_error) = signal(None::<String>);
-
-    let read_file = move |file: File| {
-        let name = file.name();
-        perf::mark("loglens:read:start");
-
-        spawn_local(async move {
-            // arrayBuffer() returns the raw UTF-8 bytes. File.text() would decode them
-            // into a UTF-16 JS string, which then has to be re-encoded to UTF-8 when it
-            // crosses into WASM: two conversions for nothing.
-            match JsFuture::from(file.array_buffer()).await {
-                Ok(buffer) => {
-                    perf::mark("loglens:read:end");
-                    perf::measure("loglens:read", "loglens:read:start", "loglens:read:end");
-                    // Crossing the JS -> WASM boundary: one memcpy into WASM memory,
-                    // then UTF-8 validation without another copy.
-                    let bytes = js_sys::Uint8Array::new(&buffer).to_vec();
-                    let text = String::from_utf8(bytes)
-                        .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned());
-                    perf::mark("loglens:copy:end");
-                    perf::measure("loglens:copy", "loglens:read:end", "loglens:copy:end");
-                    set_error.set(None);
-                    on_load.run((name, text));
-                }
-                Err(_) => set_error.set(Some(format!("{name} okunamadı"))),
-            }
-        });
-    };
+    let read_file = move |file: File| on_file.run(file);
 
     let on_change = move |ev: leptos::ev::Event| {
         let input: HtmlInputElement = ev.target().unwrap().unchecked_into();
@@ -76,8 +46,6 @@ pub fn FileDrop(on_load: Callback<(String, String)>) -> impl IntoView {
             <strong>"Log dosyasını buraya sürükle"</strong>
             <span>" ya da tıklayıp seç"</span>
         </label>
-
-        {move || error.get().map(|e| view! { <p class="error">{e}</p> })}
 
     }
 }

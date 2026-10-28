@@ -6,10 +6,10 @@ use crate::components::{
     upload::FileDrop,
 };
 use crate::filter::Filters;
-use crate::parser::{LogEntry, ParseResult, Tables};
+use crate::loader::load_file;
+use crate::parser::{LogEntry, Tables};
 use crate::perf;
 use crate::stats::{hourly, summarize, top_endpoints};
-use gloo_timers::future::TimeoutFuture;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
@@ -28,56 +28,38 @@ pub struct Dataset {
     pub parse_ms: f64,
 }
 
-const CHUNK_LINES: usize = 50_000;
-
-fn now_ms() -> f64 {
-    window().performance().map(|p| p.now()).unwrap_or(0.0)
-}
-
 #[component]
 
 pub fn App() -> impl IntoView {
     let dataset = RwSignal::new(None::<Dataset>);
     let load_count = StoredValue::new(0u32);
     let progress = RwSignal::new(None::<f64>);
-    let on_load = Callback::new(move |(name, text): (String, String)| {
+    let error = RwSignal::new(None::<String>);
+    let on_file = Callback::new(move |file: web_sys::File| {
         if progress.get_untracked().is_some() {
             return; // zaten bir dosya işleniyor
         }
 
         progress.set(Some(0.0));
+        error.set(None);
         spawn_local(async move {
-            let start = now_ms();
-            perf::mark("loglens:parse:start");
-            let total = text.len().max(1);
-            let mut consumed = 0;
-            let mut result = ParseResult::default();
-            let mut lines = text.lines();
-            loop {
-                let mut count = 0;
-                for line in lines.by_ref().take(CHUNK_LINES) {
-                    consumed += line.len() + 1;
-                    result.push_line(&text, line);
-                    count += 1;
+            let name = file.name();
+            // Reading and parsing overlap: lines are parsed as the file streams in.
+            match load_file(&file, |p| progress.set(Some(p))).await {
+                Ok(loaded) => {
+                    load_count.update_value(|c| *c += 1);
+                    dataset.set(Some(Dataset {
+                        id: load_count.get_value(),
+                        name,
+                        text: loaded.text,
+                        entries: loaded.result.entries,
+                        tables: loaded.result.tables,
+                        failed: loaded.result.failed,
+                        parse_ms: loaded.parse_ms,
+                    }));
                 }
-                if count < CHUNK_LINES {
-                    break;
-                }
-                progress.set(Some(consumed as f64 / total as f64));
-                TimeoutFuture::new(0).await;
+                Err(e) => error.set(Some(format!("{name} okunamadı: {e}"))),
             }
-            perf::mark("loglens:parse:end");
-            perf::measure("loglens:parse", "loglens:parse:start", "loglens:parse:end");
-            load_count.update_value(|c| *c += 1);
-            dataset.set(Some(Dataset {
-                id: load_count.get_value(),
-                name,
-                text,
-                entries: result.entries,
-                tables: result.tables,
-                failed: result.failed,
-                parse_ms: now_ms() - start,
-            }));
             progress.set(None);
             perf::notify("loglens:loaded");
         });
@@ -128,7 +110,8 @@ pub fn App() -> impl IntoView {
             <p>"Nginx log'larını tarayıcında analiz et. Dosyan hiçbir sunucuya gönderilmez."</p>
         </header>
         <main>
-            <FileDrop on_load=on_load />
+            <FileDrop on_file=on_file />
+            {move || error.get().map(|e| view! { <p class="error">{e}</p> })}
             {move || progress.get().map(|p| view! {
                 <div class="progress">
                     <div class="progress-bar" style:width=format!("{:.0}%", p * 100.0)></div>

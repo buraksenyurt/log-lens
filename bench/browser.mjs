@@ -238,7 +238,7 @@ function buildTable(results, env) {
   const lines = [
     head,
     sep,
-    row("Dosya okuma (`File.stream()`, son byte'a kadar)", (n) => fmtMs(results[n].read)),
+    row("Dosya okuma (dilimler, son dilim gelene kadar)", (n) => fmtMs(results[n].read)),
     row("JS → WASM kopyası (parçaların toplamı)", (n) => fmtMs(results[n].copy)),
     row("Ayrıştırma (WASM, parçaların toplamı)", (n) => fmtMs(results[n].parse)),
     row("Dosya seçimi → kayıtlar hazır", (n) => fmtMs(results[n].ready)),
