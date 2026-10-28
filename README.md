@@ -40,13 +40,13 @@ python tools/bench_native.py --skip-bench  # sadece son sonuçlardan tabloyu yen
 <!-- BENCH-NATIVE:START -->
 | İşlem | 10.000 satır | 100.000 satır | 500.000 satır |
 |---|---:|---:|---:|
-| Ayrıştırma (parse_all) | 8.07 ms | 60.70 ms | 293.99 ms |
-| Filtreleme (5xx + checkout) | 10.2 µs | 418.0 µs | 2.92 ms |
-| Path araması (checkout) | 14.8 µs | 482.7 µs | 3.51 ms |
-| Özet istatistik (summarize) | 183.4 µs | 2.49 ms | 13.04 ms |
-| Saatlik dağılım (hourly) | 19.6 µs | 439.0 µs | 3.32 ms |
-| Top endpoint'ler (top_endpoints) | 26.1 µs | 530.3 µs | 3.75 ms |
-| Ayrıştırma hızı | 1.2 M satır/sn | 1.6 M satır/sn | 1.7 M satır/sn |
+| Ayrıştırma (parse_all) | 5.41 ms | 59.84 ms | 285.39 ms |
+| Filtreleme (5xx + checkout) | 8.4 µs | 358.6 µs | 3.01 ms |
+| Path araması (checkout) | 15.0 µs | 436.7 µs | 3.65 ms |
+| Özet istatistik (summarize) | 161.0 µs | 2.59 ms | 14.54 ms |
+| Saatlik dağılım (hourly) | 17.5 µs | 481.6 µs | 3.22 ms |
+| Top endpoint'ler (top_endpoints) | 24.6 µs | 505.8 µs | 3.96 ms |
+| Ayrıştırma hızı | 1.8 M satır/sn | 1.7 M satır/sn | 1.8 M satır/sn |
 
 - **Tarih:** 2026-10-28
 - **CPU:** 12th Gen Intel(R) Core(TM) i7-1255U
@@ -83,21 +83,21 @@ npm run bench -- --browser chromium   # başka motorla karşılaştırma (README
 <!-- BENCH-BROWSER:START -->
 | Ölçüm | 10.000 satır | 100.000 satır | 500.000 satır |
 |---|---:|---:|---:|
-| Dosya okuma (`File.arrayBuffer()`) | 5.20 ms | 39.7 ms | 182 ms |
-| JS → WASM kopyası (byte kopyası + UTF-8 doğrulama) | 0.92 ms | 7.40 ms | 32.6 ms |
-| Ayrıştırma (WASM, parçalı) | 8.80 ms | 80.5 ms | 347 ms |
-| İlk çizim (Memo'lar + DOM + boyama) | 27.5 ms | 33.5 ms | 53.2 ms |
-| Dosya seçimi → panel ekranda | 42.1 ms | 164 ms | 612 ms |
-| Status filtresi (5xx) → ekranda | 25.4 ms | 24.5 ms | 25.2 ms |
-| Path araması (checkout) → ekranda | 37.1 ms | 36.7 ms | 37.3 ms |
-| Native ayrıştırma (criterion) | 8.07 ms | 60.7 ms | 294 ms |
-| WASM / native ayrıştırma oranı | 1.09× | 1.33× | 1.18× |
+| Dosya okuma (`File.arrayBuffer()`) | 5.14 ms | 33.8 ms | 177 ms |
+| JS → WASM kopyası (byte kopyası + UTF-8 doğrulama) | 0.88 ms | 6.00 ms | 29.1 ms |
+| Ayrıştırma (WASM, parçalı) | 8.54 ms | 75.4 ms | 323 ms |
+| İlk çizim (Memo'lar + DOM + boyama) | 20.1 ms | 28.7 ms | 56.3 ms |
+| Dosya seçimi → panel ekranda | 34.5 ms | 145 ms | 573 ms |
+| Status filtresi (5xx) → ekranda | 14.8 ms | 26.1 ms | 26.7 ms |
+| Path araması (checkout) → ekranda | 36.5 ms | 37.5 ms | 37.7 ms |
+| Native ayrıştırma (criterion) | 5.41 ms | 59.8 ms | 285 ms |
+| WASM / native ayrıştırma oranı | 1.58× | 1.26× | 1.13× |
 
 - **Tarih:** 2026-10-28
 - **Tarayıcı:** Firefox 157.0 (Playwright 1.64.1, headless: true)
 - **CPU:** 12th Gen Intel(R) Core(TM) i7-1255U
 - **İşletim sistemi:** Windows 11 (build 26300, x64)
-- **.wasm boyutu:** 511 KB (gzip: 173 KB)
+- **.wasm boyutu:** 530 KB (gzip: 177 KB)
 - **Yöntem:** 5 ölçüm + 1 ısınma turu, her tur yeni sekme; değerler medyandır. Ayrıştırma, UI'ı dondurmamak için parçalar arasında tarayıcıya kontrol verdiğinden native süreyle birebir aynı iş değildir.
 <!-- BENCH-BROWSER:END -->
 
@@ -119,10 +119,10 @@ Her adım ayrı bir commit; değerler 500.000 satırlık sütundan (medyan). Nat
 | | | `top_endpoints` (native) | 16.23 ms | 3.75 ms (−%77) |
 | | | Filtreleme, 5xx + checkout (native) | 6.46 ms | 2.92 ms (−%55) |
 | | | İlk çizim (Memo'lar + DOM + boyama) | 74.9 ms | 53.2 ms (−%29) |
-| | | Ayrıştırma (native) | 282.08 ms | 293.99 ms (+%4)¹ |
-| | | Dosya seçimi → panel ekranda | 544 ms | 612 ms (+%12)¹ |
+| | | Ayrıştırma (native) | 282.08 ms | 285.39 ms (≈ aynı) |
+| | | Dosya seçimi → panel ekranda | 544 ms | 573 ms (+%5)¹ |
 
-¹ Bu turda kodu değişmeyen adımlar da yavaşladı: dosya okuma 149 → 182 ms (+%22), `hourly` 2.82 → 3.32 ms (+%18). Yükleme süresindeki artış bu yüzden büyük olasılıkla ölçüm koşullarından (güç modu, sıcaklık, arka plan işleri) kaynaklanıyor; aynı karşılaştırma kontrollü ortamda ayrıştırmada %7–20 iyileşme gösterdi. Bir sonraki ölçümde tekrar kontrol edilecek.
+¹ İlk ölçümde 612 ms çıkmıştı; kodu değişmeyen adımlar da yavaşladığı için ölçüm tekrarlandı (tablodaki değerler tekrardan). Kalan farkın çoğu kodu değişmeyen dosya okumasından geliyor (149 → 177 ms); bu adım tur tura ±%15 oynuyor.
 
 ## Örnek Çalışma Zamanı Görüntüleri
 
