@@ -101,6 +101,20 @@ npm run bench -- --browser chromium   # başka motorla karşılaştırma (README
 - **Yöntem:** 5 ölçüm + 1 ısınma turu, her tur yeni sekme; değerler medyandır. Ayrıştırma, UI'ı dondurmamak için parçalar arasında tarayıcıya kontrol verdiğinden native süreyle birebir aynı iş değildir.
 <!-- BENCH-BROWSER:END -->
 
+### İki sürümü karşılaştırma (A/B)
+
+Ayrı zamanlarda yapılan ölçümler arasındaki %10–20'lik farklar ölçüm koşullarından (güç modu, sıcaklık, arka plan işleri) kaynaklanabilir. Bir değişikliğin gerçekten hızlandırıp hızlandırmadığını görmek için iki sürüm aynı Firefox oturumunda dönüşümlü olarak ölçülür:
+
+```bash
+npm run bench:ab -- 34e3d75 HEAD                          # iki commit
+npm run bench:ab -- HEAD .                                # son commit ile commit edilmemiş değişiklikler
+npm run bench:ab -- 34e3d75 HEAD --runs 15 --size 100000
+```
+
+- Her ref `.bench-ab/` altında geçici bir git worktree'ye alınır ve release olarak derlenir; iş bitince worktree silinir (`--keep` ile tutulur).
+- 1 ısınma + 10 tur yapılır; her turda iki sürümün sırası değiştirilir (A B, B A, ...). Tablo medyanları, farkı ve B'nin kaç turda daha hızlı olduğunu gösterir.
+- Yalnızca ölçüm noktaları olan sürümler (`8345d5c` ve sonrası) karşılaştırılabilir. README güncellenmez.
+
 ### Optimizasyon günlüğü
 
 Her adım ayrı bir commit; değerler 500.000 satırlık sütundan (medyan). Native satırlar criterion, diğerleri Firefox ölçümüdür.

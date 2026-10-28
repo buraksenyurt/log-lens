@@ -10,3 +10,6 @@
 
 # Node (browser benchmarks)
 node_modules/
+
+# A/B benchmark worktrees
+/.bench-ab/
