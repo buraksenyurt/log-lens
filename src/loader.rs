@@ -136,5 +136,5 @@ fn parse_segment(result: &mut ParseResult, buf: &[u8], start: usize, end: usize)
 fn describe(e: JsValue) -> String {
     e.as_string()
         .or_else(|| js_sys::Error::try_from(e).ok().map(|e| String::from(e.message())))
-        .unwrap_or_else(|| "bilinmeyen hata".into())
+        .unwrap_or_default() // empty: the UI shows its own "unknown error" text
 }

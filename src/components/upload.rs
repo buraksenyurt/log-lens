@@ -2,11 +2,14 @@ use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{DragEvent, File, HtmlInputElement};
 
+use crate::i18n::use_i18n;
+
 /// Select file and drag-and-drop area.
 /// The selected file is handed to `on_file`; reading it is up to the caller
 /// (see `loader::load_file`, which parses the file while it streams in).
 #[component]
 pub fn FileDrop(on_file: Callback<File>) -> impl IntoView {
+    let i18n = use_i18n();
     let (dragging, set_dragging) = signal(false);
     let read_file = move |file: File| on_file.run(file);
 
@@ -43,8 +46,8 @@ pub fn FileDrop(on_file: Callback<File>) -> impl IntoView {
             on:drop=on_drop
         >
             <input type="file" accept=".log,.txt" on:change=on_change />
-            <strong>"Log dosyasını buraya sürükle"</strong>
-            <span>" ya da tıklayıp seç"</span>
+            <strong>{move || i18n.t().drop_title}</strong>
+            <span>{move || i18n.t().drop_hint}</span>
         </label>
 
     }

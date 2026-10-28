@@ -19,6 +19,18 @@ Test verisi üretmek için:
 python3 tools/logs_gen.py 500000 > samples/big.log
 ```
 
+## Dil desteği
+
+Arayüz İngilizce, Almanca ve Türkçe kullanılabilir. Dil, sağ üstteki seçiciden değiştirilir; seçim tarayıcıda (`localStorage`) saklanır. İlk açılışta tarayıcının dili kullanılır, desteklenmiyorsa İngilizce. Sayılar da seçili dile göre biçimlenir (`10,000` / `10.000`, `13.0%` / `13,0 %` / `%13,0`).
+
+Çeviriler bağımlılık eklemeyen küçük bir katmanda, [`src/i18n.rs`](src/i18n.rs) içinde:
+
+- Sabit metinler `Texts` yapısının alanlarıdır, her dil bir `const` değerdir. Bir dilde eksik çeviri **derleme hatası** verir.
+- Değer içeren metinler ve sayı biçimleri `Lang` üzerinde, her dili kapsamak zorunda olan `match` ifadeleriyle yazılmıştır.
+- Seçili dil context ile paylaşılan bir `RwSignal`'dır; dil değişince sadece metin düğümleri güncellenir, veriler yeniden hesaplanmaz.
+
+Yeni bir dil eklemek için: `Lang`'e bir değer, `ALL` dizisine o değer, yeni bir `Texts` sabiti ve derleyicinin göstereceği `match` kollarını eklemek yeterli.
+
 ## Performans
 
 ### Native ölçümler (criterion)

@@ -357,3 +357,8 @@ tr.selected, tr.selected:hover { background: #ffedd5; }
 .filters .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px;
   border: 1px solid var(--accent); border-radius: 999px; background: #fff7ed; font-size: 13px; color: var(--text); }
 .filters .chip button { border: none; background: transparent; padding: 0 6px; font-size: 16px; line-height: 1; cursor: pointer; }
+
+.header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lang-select select { font: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--card); color: var(--text); margin-top: 24px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

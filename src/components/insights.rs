@@ -1,10 +1,12 @@
 use crate::filter::Filters;
+use crate::i18n::use_i18n;
 use crate::stats::{EndpointStat, HourBucket};
 use leptos::prelude::*;
 
 /// 24 hour request histogram (pure CSS bars).
 #[component]
 pub fn HourlyChart(#[prop(into)] buckets: Signal<[HourBucket; 24]>) -> impl IntoView {
+    let i18n = use_i18n();
     let max = move || {
         buckets
             .read()
@@ -16,7 +18,7 @@ pub fn HourlyChart(#[prop(into)] buckets: Signal<[HourBucket; 24]>) -> impl Into
     };
     view! {
         <div class="panel">
-            <h3>"Saatlik dağılım"</h3>
+            <h3>{move || i18n.t().hourly}</h3>
             <div class="bars">
                 {(0..24)
                     .map(|h| {
@@ -31,7 +33,7 @@ pub fn HourlyChart(#[prop(into)] buckets: Signal<[HourBucket; 24]>) -> impl Into
                                 class="bar"
                                 title=move || {
                                     let b = bucket();
-                                    format!("{h:02}:00 · {} istek · {} adet 5xx", b.total, b.errors)
+                                    i18n.lang().hour_tooltip(h, b.total, b.errors)
                                 }
                             >
                                 <div class="fill" style:height=move || format!("{}%", height())>
@@ -51,20 +53,24 @@ pub fn HourlyChart(#[prop(into)] buckets: Signal<[HourBucket; 24]>) -> impl Into
 #[component]
 pub fn TopEndpoints(#[prop(into)] items: Signal<Vec<EndpointStat>>) -> impl IntoView {
     let filters = expect_context::<Filters>();
+    let i18n = use_i18n();
     view! {
         <div class="panel">
-            <h3>"En yoğun endpoint'ler"</h3>
+            <h3>{move || i18n.t().top_endpoints}</h3>
             <table class="compact">
                 <thead>
                     <tr>
-                        <th>"Path"</th>
-                        <th class="num">"İstek"</th>
+                        <th>{move || i18n.t().path}</th>
+                        <th class="num">{move || i18n.t().requests}</th>
                         <th class="num">"5xx"</th>
-                        <th class="num">"Ort."</th>
+                        <th class="num">{move || i18n.t().avg_short}</th>
                     </tr>
                 </thead>
                 <tbody>
                     {move || {
+                        // Reading the language here re-renders the rows when it changes.
+                        let lang = i18n.lang();
+                        let t = lang.texts();
                         items
                             .get()
                             .into_iter()
@@ -78,13 +84,13 @@ pub fn TopEndpoints(#[prop(into)] items: Signal<Vec<EndpointStat>>) -> impl Into
                                     <tr
                                         class="clickable"
                                         class:selected=selected
-                                        title="Bu endpoint'e göre filtrele (tekrar tıklayınca kaldırılır)"
+                                        title=t.filter_by_endpoint
                                         on:click=move |_| filters.toggle_endpoint(path.clone())
                                     >
                                         <td class="mono">{item.path}</td>
-                                        <td class="num">{item.count}</td>
-                                        <td class="num s5">{item.errors}</td>
-                                        <td class="num">{format!("{:.0} ms", item.avg_ms)}</td>
+                                        <td class="num">{lang.int(item.count as u64)}</td>
+                                        <td class="num s5">{lang.int(item.errors as u64)}</td>
+                                        <td class="num">{lang.ms(item.avg_ms)}</td>
                                     </tr>
                                 }
                             })

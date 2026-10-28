@@ -1,10 +1,11 @@
-use crate::stats::{Summary, human_bytes};
+use crate::i18n::use_i18n;
+use crate::stats::Summary;
 use leptos::prelude::*;
 
 /// A single statistic card.
 #[component]
 fn StatCard(
-    label: &'static str,
+    #[prop(into)] label: Signal<&'static str>,
     #[prop(into)] value: Signal<String>,
     #[prop(optional)] tone: &'static str,
 ) -> impl IntoView {
@@ -16,27 +17,46 @@ fn StatCard(
     }
 }
 
-fn fmt_ms(v: Option<f64>) -> String {
-    v.map(|v| format!("{v:.0} ms"))
-        .unwrap_or_else(|| "—".into())
-}
-
 /// The panel displaying all statistics.
 #[component]
 pub fn StatsPanel(#[prop(into)] summary: Signal<Summary>) -> impl IntoView {
+    let i18n = use_i18n();
+    let t = move || i18n.t();
+    let lang = move || i18n.lang();
+    let ms = move |v: Option<f64>| v.map(|v| lang().ms(v)).unwrap_or_else(|| "—".into());
     view! {
         <section class="cards">
-            <StatCard label="İstek" value=move || summary.read().total.to_string() />
             <StatCard
-                label="Hata oranı"
-                tone="bad"
-                value=move || format!("%{:.1}", summary.read().error_rate())
+                label=Signal::derive(move || t().requests)
+                value=move || lang().int(summary.read().total as u64)
             />
-            <StatCard label="5xx" tone="bad" value=move || summary.read().server_errors.to_string() />
-            <StatCard label="Tekil IP" value=move || summary.read().unique_ips.to_string() />
-            <StatCard label="Trafik" value=move || human_bytes(summary.read().total_bytes) />
-            <StatCard label="Ort. süre" value=move || fmt_ms(summary.read().avg_ms) />
-            <StatCard label="p95 süre" tone="warn" value=move || fmt_ms(summary.read().p95_ms) />
+            <StatCard
+                label=Signal::derive(move || t().error_rate)
+                tone="bad"
+                value=move || lang().percent(summary.read().error_rate())
+            />
+            <StatCard
+                label=Signal::derive(|| "5xx")
+                tone="bad"
+                value=move || lang().int(summary.read().server_errors as u64)
+            />
+            <StatCard
+                label=Signal::derive(move || t().unique_ips)
+                value=move || lang().int(summary.read().unique_ips as u64)
+            />
+            <StatCard
+                label=Signal::derive(move || t().traffic)
+                value=move || lang().bytes(summary.read().total_bytes)
+            />
+            <StatCard
+                label=Signal::derive(move || t().avg_duration)
+                value=move || ms(summary.read().avg_ms)
+            />
+            <StatCard
+                label=Signal::derive(move || t().p95_duration)
+                tone="warn"
+                value=move || ms(summary.read().p95_ms)
+            />
         </section>
     }
 }

@@ -6,6 +6,7 @@ use crate::components::{
     upload::FileDrop,
 };
 use crate::filter::Filters;
+use crate::i18n::{I18n, LanguageSelect};
 use crate::loader::load_file;
 use crate::parser::{LogEntry, Tables};
 use crate::perf;
@@ -34,7 +35,10 @@ pub fn App() -> impl IntoView {
     let dataset = RwSignal::new(None::<Dataset>);
     let load_count = StoredValue::new(0u32);
     let progress = RwSignal::new(None::<f64>);
-    let error = RwSignal::new(None::<String>);
+    let i18n = I18n::new();
+    provide_context(i18n);
+    // (file name, reason); formatted in the current language when shown.
+    let error = RwSignal::new(None::<(String, String)>);
     let on_file = Callback::new(move |file: web_sys::File| {
         if progress.get_untracked().is_some() {
             return; // zaten bir dosya işleniyor
@@ -58,7 +62,7 @@ pub fn App() -> impl IntoView {
                         parse_ms: loaded.parse_ms,
                     }));
                 }
-                Err(e) => error.set(Some(format!("{name} okunamadı: {e}"))),
+                Err(reason) => error.set(Some((name, reason))),
             }
             progress.set(None);
             perf::notify("loglens:loaded");
@@ -106,24 +110,33 @@ pub fn App() -> impl IntoView {
 
     view! {
         <header>
-            <h1>"Log Lens"</h1>
-            <p>"Nginx log'larını tarayıcında analiz et. Dosyan hiçbir sunucuya gönderilmez."</p>
+            <div class="header-row">
+                <h1>"Log Lens"</h1>
+                <LanguageSelect />
+            </div>
+            <p>{move || i18n.t().subtitle}</p>
         </header>
         <main>
             <FileDrop on_file=on_file />
-            {move || error.get().map(|e| view! { <p class="error">{e}</p> })}
+            {move || {
+                error
+                    .get()
+                    .map(|(file, reason)| {
+                        let reason = if reason.is_empty() { i18n.t().unknown_error.to_string() } else { reason };
+                        view! { <p class="error">{i18n.lang().read_error(&file, &reason)}</p> }
+                    })
+            }}
             {move || progress.get().map(|p| view! {
                 <div class="progress">
                     <div class="progress-bar" style:width=format!("{:.0}%", p * 100.0)></div>
-                    <span>{format!("Ayrıştırılıyor… %{:.0}", p * 100.0)}</span>
+                    <span>{i18n.lang().parsing_progress(p)}</span>
                 </div>
             })}
             <Show when=move || dataset.with(|d| d.is_some())>
                 {move || dataset.with(|d| d.as_ref().map(|d| view! {
                     <p class="meta">
                         <b>{d.name.clone()}</b>
-                        {format!(" · {} kayıt · {} hatalı satır · {:.1} ms'de ayrıştırıldı",
-                            d.entries.len(), d.failed, d.parse_ms)}
+                        {i18n.lang().file_summary(d.entries.len(), d.failed, d.parse_ms)}
                     </p>
                 }))}
                 <FilterBar matched=Signal::derive(move || filtered.with(|v| v.len())) />

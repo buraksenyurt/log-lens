@@ -1,6 +1,6 @@
 use crate::app::Dataset;
 use crate::parser::{LogEntry, raw_entry};
-use crate::stats::human_bytes;
+use crate::i18n::use_i18n;
 use leptos::prelude::*;
 const PAGE_SIZE: usize = 50;
 
@@ -40,6 +40,8 @@ pub fn RequestTable(
     dataset: RwSignal<Option<Dataset>>,
     #[prop(into)] rows: Signal<Vec<usize>>,
 ) -> impl IntoView {
+    let i18n = use_i18n();
+    let t = move || i18n.t();
     let sort_key = RwSignal::new(SortKey::Order);
     let descending = RwSignal::new(false);
     let page = RwSignal::new(0usize);
@@ -132,19 +134,19 @@ pub fn RequestTable(
                 <thead>
                     <tr>
                         <th class="sortable" on:click=move |_| sort_by(SortKey::Order)>
-                            "Zaman" {arrow(SortKey::Order)}
+                            {move || t().time} {arrow(SortKey::Order)}
                         </th>
                         <th>"IP"</th>
-                        <th>"Method"</th>
-                        <th>"Path"</th>
+                        <th>{move || t().method}</th>
+                        <th>{move || t().path}</th>
                         <th class="sortable num" on:click=move |_| sort_by(SortKey::Status)>
-                            "Status" {arrow(SortKey::Status)}
+                            {move || t().status} {arrow(SortKey::Status)}
                         </th>
                         <th class="sortable num" on:click=move |_| sort_by(SortKey::Bytes)>
-                            "Boyut" {arrow(SortKey::Bytes)}
+                            {move || t().size} {arrow(SortKey::Bytes)}
                         </th>
                         <th class="sortable num" on:click=move |_| sort_by(SortKey::Duration)>
-                            "Süre" {arrow(SortKey::Duration)}
+                            {move || t().duration} {arrow(SortKey::Duration)}
                         </th>
                     </tr>
                 </thead>
@@ -155,6 +157,8 @@ pub fn RequestTable(
                         children=move |row| {
                             let e = row.entry;
                             let title = row.path.clone();
+                            // Rows are created once by <For>; these cells re-render on a language change.
+                            let (bytes, request_time) = (e.bytes, e.request_time);
                             view! {
                                 <tr>
                                     <td class="mono">{row.timestamp}</td>
@@ -162,9 +166,9 @@ pub fn RequestTable(
                                     <td>{row.method}</td>
                                     <td class="path" title=title>{row.path}</td>
                                     <td class=format!("num {}", status_class(e.status))>{e.status}</td>
-                                    <td class="num">{human_bytes(e.bytes)}</td>
+                                    <td class="num">{move || i18n.lang().bytes(bytes)}</td>
                                     <td class="num">
-                                        {e.request_time.map(|t| format!("{:.0} ms", t * 1000.0))}
+                                        {move || request_time.map(|t| i18n.lang().ms(t * 1000.0))}
                                     </td>
                                 </tr>
                             }
@@ -177,14 +181,14 @@ pub fn RequestTable(
                     disabled=move || page.get() == 0
                     on:click=move |_| page.update(|p| *p -= 1)
                 >
-                    "‹ Önceki"
+                    {move || t().previous}
                 </button>
-                <span>{move || format!("Sayfa {} / {}", page.get() + 1, page_count())}</span>
+                <span>{move || i18n.lang().page_of(page.get() + 1, page_count())}</span>
                 <button
                     disabled=move || { page.get() + 1 >= page_count() }
                     on:click=move |_| page.update(|p| *p += 1)
                 >
-                    "Sonraki ›"
+                    {move || t().next}
                 </button>
             </div>
         </section>
