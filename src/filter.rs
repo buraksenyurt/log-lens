@@ -9,6 +9,8 @@ pub struct Criteria {
     pub status_class: Option<u16>,
     pub method: Option<String>,
     pub path_contains: String,
+    /// Exact endpoint (path without query string), e.g. picked from the top list.
+    pub endpoint: Option<String>,
     pub min_ms: Option<f64>,
 }
 
@@ -16,10 +18,18 @@ impl Criteria {
     /// Prepares the criteria for one dataset. The path condition is evaluated
     /// once per distinct path here, instead of once per entry in `matches`.
     pub fn matcher(&self, paths: &PathTable) -> Matcher<'_> {
-        let path_ok = (!self.path_contains.is_empty()).then(|| {
+        let needs_mask = !self.path_contains.is_empty() || self.endpoint.is_some();
+        let path_ok = needs_mask.then(|| {
             paths
                 .iter()
-                .map(|p| p.contains(&self.path_contains))
+                .enumerate()
+                .map(|(id, p)| {
+                    let contains = self.path_contains.is_empty() || p.contains(&self.path_contains);
+                    let endpoint = self.endpoint.as_deref().is_none_or(|wanted| {
+                        paths.endpoint(paths.endpoint_of(id as u32)) == wanted
+                    });
+                    contains && endpoint
+                })
                 .collect()
         });
         Matcher {
@@ -32,7 +42,7 @@ impl Criteria {
 /// [`Criteria`] bound to a dataset's [`PathTable`].
 pub struct Matcher<'a> {
     criteria: &'a Criteria,
-    /// path_ok[path_id]: does that path contain the searched text?
+    /// path_ok[path_id]: does that path pass the text search and the endpoint filter?
     path_ok: Option<Vec<bool>>,
 }
 
@@ -74,6 +84,7 @@ pub struct Filters {
     pub status: RwSignal<String>,
     pub method: RwSignal<String>,
     pub path: RwSignal<String>,
+    pub endpoint: RwSignal<Option<String>>,
     pub min_ms: RwSignal<String>,
 }
 
@@ -83,6 +94,7 @@ impl Filters {
             status: RwSignal::new(String::new()),
             method: RwSignal::new(String::new()),
             path: RwSignal::new(String::new()),
+            endpoint: RwSignal::new(None),
             min_ms: RwSignal::new(String::new()),
         }
     }
@@ -93,6 +105,7 @@ impl Filters {
             status_class: self.status.get().parse().ok(),
             method: Some(self.method.get()).filter(|m| !m.is_empty()),
             path_contains: self.path.get().trim().to_string(),
+            endpoint: self.endpoint.get(),
             min_ms: self.min_ms.get().parse().ok(),
         }
     }
@@ -101,7 +114,14 @@ impl Filters {
         self.status.set(String::new());
         self.method.set(String::new());
         self.path.set(String::new());
+        self.endpoint.set(None);
         self.min_ms.set(String::new());
+    }
+
+    /// Selects an endpoint; selecting the active one again clears it.
+    pub fn toggle_endpoint(&self, endpoint: String) {
+        self.endpoint
+            .update(|current| *current = (current.as_deref() != Some(&endpoint)).then_some(endpoint));
     }
 }
 
@@ -133,6 +153,7 @@ mod tests {
             status_class: Some(5),
             method: Some("POST".into()),
             path_contains: "checkout".into(),
+            endpoint: None,
             min_ms: Some(500.0),
         };
 
@@ -146,5 +167,26 @@ mod tests {
         let m = c.matcher(&r.paths);
         let results: Vec<bool> = r.entries.iter().map(|e| m.matches(e)).collect();
         assert_eq!(results, vec![true, false, false, false, false]);
+    }
+
+    #[test]
+    fn endpoint_is_exact_and_ignores_query() {
+        let r = parse(&[
+            ("GET", "/", 200, 0.1),
+            ("GET", "/api/cart", 200, 0.1),
+            ("GET", "/api/search?q=rust", 200, 0.1),
+            ("GET", "/api/search?q=wasm", 200, 0.1),
+        ]);
+        let pick = |endpoint: &str| {
+            let c = Criteria {
+                endpoint: Some(endpoint.into()),
+                ..Default::default()
+            };
+            let m = c.matcher(&r.paths);
+            r.entries.iter().map(|e| m.matches(e)).collect::<Vec<_>>()
+        };
+        // "/" must not match every path (a substring search would).
+        assert_eq!(pick("/"), vec![true, false, false, false]);
+        assert_eq!(pick("/api/search"), vec![false, false, true, true]);
     }
 }

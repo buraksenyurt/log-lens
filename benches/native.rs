@@ -54,6 +54,7 @@ fn benches(c: &mut Criterion) {
         status_class: Some(5),
         method: None,
         path_contains: "checkout".into(),
+        endpoint: None,
         min_ms: None,
     };
     // What typing into the path search box does: a substring test on every entry.

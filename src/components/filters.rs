@@ -34,6 +34,23 @@ pub fn FilterBar(#[prop(into)] matched: Signal<usize>) -> impl IntoView {
                 "Min. süre (ms)"
                 <input type="number" min="0" step="50" placeholder="0" bind:value=f.min_ms />
             </label>
+            {move || {
+                f.endpoint
+                    .get()
+                    .map(|endpoint| {
+                        view! {
+                            <span class="chip">
+                                "Endpoint: " <code>{endpoint}</code>
+                                <button
+                                    title="Endpoint filtresini kaldır"
+                                    on:click=move |_| f.endpoint.set(None)
+                                >
+                                    "×"
+                                </button>
+                            </span>
+                        }
+                    })
+            }}
             <button on:click=move |_| f.reset()>"Temizle"</button>
             <span class="matched">{move || format!("{} eşleşme", matched.get())}</span>
         </section>

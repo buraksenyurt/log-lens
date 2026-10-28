@@ -70,8 +70,17 @@ pub fn TopEndpoints(#[prop(into)] items: Signal<Vec<EndpointStat>>) -> impl Into
                             .into_iter()
                             .map(|item| {
                                 let path = item.path.clone();
+                                let selected_path = item.path.clone();
+                                let selected = move || {
+                                    filters.endpoint.with(|e| e.as_deref() == Some(selected_path.as_str()))
+                                };
                                 view! {
-                                    <tr class="clickable" on:click=move |_| filters.path.set(path.clone())>
+                                    <tr
+                                        class="clickable"
+                                        class:selected=selected
+                                        title="Bu endpoint'e göre filtrele (tekrar tıklayınca kaldırılır)"
+                                        on:click=move |_| filters.toggle_endpoint(path.clone())
+                                    >
                                         <td class="mono">{item.path}</td>
                                         <td class="num">{item.count}</td>
                                         <td class="num s5">{item.errors}</td>
