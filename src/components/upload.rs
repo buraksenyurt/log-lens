@@ -18,13 +18,18 @@ pub fn FileDrop(on_load: Callback<(String, String)>) -> impl IntoView {
         perf::mark("loglens:read:start");
 
         spawn_local(async move {
-            match JsFuture::from(file.text()).await {
-                Ok(js) => {
+            // arrayBuffer() returns the raw UTF-8 bytes. File.text() would decode them
+            // into a UTF-16 JS string, which then has to be re-encoded to UTF-8 when it
+            // crosses into WASM: two conversions for nothing.
+            match JsFuture::from(file.array_buffer()).await {
+                Ok(buffer) => {
                     perf::mark("loglens:read:end");
                     perf::measure("loglens:read", "loglens:read:start", "loglens:read:end");
-                    // Crossing the JS -> WASM boundary: the UTF-16 JS string is copied
-                    // into WASM memory as UTF-8. Measured separately because it is not free.
-                    let text = js.as_string().unwrap_or_default();
+                    // Crossing the JS -> WASM boundary: one memcpy into WASM memory,
+                    // then UTF-8 validation without another copy.
+                    let bytes = js_sys::Uint8Array::new(&buffer).to_vec();
+                    let text = String::from_utf8(bytes)
+                        .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned());
                     perf::mark("loglens:copy:end");
                     perf::measure("loglens:copy", "loglens:read:end", "loglens:copy:end");
                     set_error.set(None);

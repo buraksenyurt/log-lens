@@ -1038,6 +1038,7 @@ dependencies = [
  "console_error_panic_hook",
  "criterion",
  "gloo-timers",
+ "js-sys",
  "leptos",
  "wasm-bindgen",
  "wasm-bindgen-futures",

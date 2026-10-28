@@ -227,8 +227,8 @@ function buildTable(results, env) {
   const lines = [
     head,
     sep,
-    row("Dosya okuma (`File.text()`)", (n) => fmtMs(results[n].read)),
-    row("JS → WASM metin kopyası (UTF-16 → UTF-8)", (n) => fmtMs(results[n].copy)),
+    row("Dosya okuma (`File.arrayBuffer()`)", (n) => fmtMs(results[n].read)),
+    row("JS → WASM kopyası (byte kopyası + UTF-8 doğrulama)", (n) => fmtMs(results[n].copy)),
     row("Ayrıştırma (WASM, parçalı)", (n) => fmtMs(results[n].parse)),
     row("İlk çizim (Memo'lar + DOM + boyama)", (n) => fmtMs(results[n].render)),
     row("Dosya seçimi → panel ekranda", (n) => fmtMs(results[n].total)),

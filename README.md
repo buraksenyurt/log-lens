@@ -56,7 +56,7 @@ python tools/bench_native.py --skip-bench  # sadece son sonuçlardan tabloyu yen
 
 ### Tarayıcı ölçümleri (Firefox, uçtan uca)
 
-Uygulamanın release build'i [Playwright](https://playwright.dev) ile headless Firefox'ta açılır, aynı `samples/bench_*.log` dosyaları yüklenir ve kullanıcının gördüğü süreler ölçülür. Uygulama; dosya okuma, JS'ten WASM'a metin kopyası ve ayrıştırma adımlarını `performance.measure` ile (`loglens:read`, `loglens:copy`, `loglens:parse`) işaretler; bu ölçümler Firefox profiler'ında da görünür.
+Uygulamanın release build'i [Playwright](https://playwright.dev) ile headless Firefox'ta açılır, aynı `samples/bench_*.log` dosyaları yüklenir ve kullanıcının gördüğü süreler ölçülür. Uygulama; dosya okuma (`File.arrayBuffer()`), JS'ten WASM'a byte kopyası ve ayrıştırma adımlarını `performance.measure` ile (`loglens:read`, `loglens:copy`, `loglens:parse`) işaretler; bu ölçümler Firefox profiler'ında da görünür.
 
 İlk kurulum (bir kez):
 
@@ -99,6 +99,16 @@ npm run bench -- --browser chromium   # başka motorla karşılaştırma (README
 - **.wasm boyutu:** 506 KB (gzip: 172 KB)
 - **Yöntem:** 5 ölçüm + 1 ısınma turu, her tur yeni sekme; değerler medyandır. Ayrıştırma, UI'ı dondurmamak için parçalar arasında tarayıcıya kontrol verdiğinden native süreyle birebir aynı iş değildir.
 <!-- BENCH-BROWSER:END -->
+
+### Optimizasyon günlüğü
+
+Her adım ayrı bir commit; değerler Firefox ölçümünün 500.000 satırlık sütunundan (medyan).
+
+| # | Değişiklik | Ölçüm | Önce | Sonra |
+|---|---|---|---:|---:|
+| 1 | `File.text()` yerine `File.arrayBuffer()`: UTF-8 → UTF-16 → UTF-8 dönüşümleri yerine tek byte kopyası | Dosya okuma | 281 ms | _ölçülecek_ |
+| | | JS → WASM kopyası | 176 ms | _ölçülecek_ |
+| | | Dosya seçimi → panel ekranda | 924 ms | _ölçülecek_ |
 
 ## Örnek Çalışma Zamanı Görüntüleri
 
