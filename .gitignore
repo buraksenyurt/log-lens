@@ -1,0 +1,9 @@
+# Ignore dist folder
+/dist
+/target
+
+# Ignore vs code settings
+.vscode/
+
+# Ignore log files
+*.log
