@@ -2,6 +2,7 @@
 name = "log-lens"
 description = "A simple Leptos application. Analyze the logs efficiently on Client-side with power of WASM"
 authors = ["BSŞ"]
+license = "MIT"
 version = "0.1.0"
 edition = "2024"
 

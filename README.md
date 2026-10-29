@@ -179,3 +179,7 @@ Her adım ayrı bir commit; değerler 500.000 satırlık sütundan (medyan). Nat
 ![Runtime 00](runtime_00.png)
 
 ![Runtime 01](runtime_01.png)
+
+## Lisans
+
+Bu proje [MIT lisansı](LICENSE) ile dağıtılmaktadır.

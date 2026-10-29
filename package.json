@@ -1,6 +1,7 @@
 {
   "name": "log-lens-bench",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Browser (Firefox) benchmarks for Log Lens",
   "scripts": {
